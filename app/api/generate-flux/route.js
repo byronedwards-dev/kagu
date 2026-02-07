@@ -1,11 +1,11 @@
 // POST /api/generate-flux
-// Generates images via Black Forest Labs Flux Pro API
+// Generates images via Black Forest Labs Flux API
 // Body: { prompt, width?, height?, model? }
 //
 // Flux API is async: submit → poll → return image URL
-// Models: "flux-pro-1.1" (default), "flux-pro", "flux-dev", "flux-max"
+// Models: "flux-2-pro" (default), "flux-2-max", "flux-pro-1.1", "flux-max"
 
-const BFL_BASE = "https://api.bfl.ml/v1";
+const BFL_BASE = "https://api.bfl.ai/v1";
 
 export async function POST(request) {
   const key = process.env.BFL_API_KEY;
@@ -18,7 +18,7 @@ export async function POST(request) {
 
   try {
     const body = await request.json();
-    const model = body.model || "flux-pro-1.1";
+    const model = body.model || "flux-2-pro";
 
     // Step 1: Submit generation request
     const submitRes = await fetch(`${BFL_BASE}/${model}`, {

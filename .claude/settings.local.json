@@ -11,7 +11,19 @@
       "Bash(cmd /c \"del /f \"C:Usersbyronkagu-kidsnul\" 2>&1\")",
       "Bash(cmd /c \"del \\\\?\\\\C:\\\\Users\\\\byron\\\\kagu-kids\\\\nul\")",
       "Bash(git init:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git remote add:*)",
+      "Bash(git branch:*)",
+      "Bash(git push:*)",
+      "Bash(where:*)",
+      "Bash(npm install:*)",
+      "Bash(vercel whoami:*)",
+      "Bash(vercel login:*)",
+      "Bash(vercel:*)",
+      "WebFetch(domain:docs.bfl.ml)",
+      "WebFetch(domain:developer.ideogram.ai)",
+      "Bash(cmd /c \"taskkill /F /IM node.exe 2>nul\")"
     ]
   }
 }
