@@ -3,8 +3,8 @@
 // Body: { prompt, model? }
 //
 // Models:
-//   "gemini-2.0-flash-preview-image-generation" = Nano Banana (fast)
-//   "gemini-2.0-pro-preview-image-generation" = Nano Banana Pro (quality)
+//   "gemini-2.5-flash-image" = Nano Banana (fast)
+//   "gemini-2.5-pro-image" = Nano Banana Pro (quality)
 //
 // Docs: https://ai.google.dev/gemini-api/docs/image-generation
 
@@ -19,7 +19,7 @@ export async function POST(request) {
 
   try {
     const body = await request.json();
-    const model = body.model || "gemini-2.0-flash-preview-image-generation";
+    const model = body.model || "gemini-2.5-flash-image";
 
     const res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`,

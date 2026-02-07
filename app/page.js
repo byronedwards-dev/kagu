@@ -517,7 +517,7 @@ function TCard({ page, op, idx, lidx, onAI, onSave }) {
    IMAGE GENERATION VIEW
    ═══════════════════════════════════════ */
 function ImageGenView({ prompts, images, setImages, outline }) {
-  const [selectedModel, setSelectedModel] = useState("flux-pro-1.1");
+  const [selectedModel, setSelectedModel] = useState("flux-2-pro");
   const [genIdx, setGenIdx] = useState(null); // which page is currently generating
   const [genErr, setGenErr] = useState(null);
   const [copied, setCopied] = useState(null);
