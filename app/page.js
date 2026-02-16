@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import "./globals.css";
 import { callClaude } from "@/lib/api";
-import { storage, saveState as saveStateSnapshot, listStates } from "@/lib/storage";
+import { storage } from "@/lib/storage";
 import { T, STEPS, parseJSON } from "@/lib/constants";
 import { loadRules, saveRules, assembleSystemPrompt } from "@/lib/rules";
 import KaguLogo from "@/components/ui/KaguLogo";
@@ -56,7 +56,6 @@ export default function App() {
   const [prompts, setPrompts] = useState([]);
   const [images, setImages] = useState({});
   const [dirtyPages, setDirtyPages] = useState([]);
-  const [savedStates, setSavedStates] = useState([]);
 
   // ─── Staleness ───
   const [outlineHash, setOutlineHash] = useState("");
@@ -97,8 +96,8 @@ export default function App() {
 
   // ─── Auto-save ───
   const getState = useCallback(() => ({
-    brief, concepts, selConcept, chars, outline, text, prompts, images, step, done: [...done], dirtyPages,
-  }), [brief, concepts, selConcept, chars, outline, text, prompts, images, step, done, dirtyPages]);
+    brief, concepts, selConcept, chars, outline, text, prompts, images, step, done: [...done], dirtyPages, rules,
+  }), [brief, concepts, selConcept, chars, outline, text, prompts, images, step, done, dirtyPages, rules]);
 
   useEffect(() => {
     const t = setTimeout(async () => {
@@ -116,7 +115,6 @@ export default function App() {
         const r = await storage.get("autosave");
         if (r) { const d = JSON.parse(r.value); if (d.state) loadStateData(d.state); }
       } catch {}
-      try { const states = await listStates(); setSavedStates(states); } catch {}
     })();
   }, []);
 
@@ -132,26 +130,8 @@ export default function App() {
     if (s.step) setStep(s.step);
     if (s.done) setDone(new Set(s.done));
     if (s.dirtyPages) setDirtyPages(s.dirtyPages);
+    if (s.rules) setRules(s.rules);
     setTextStale(false); setPromptsStale(false);
-  };
-
-  // ─── State management ───
-  const handleSaveState = async (label) => {
-    const snapshot = await saveStateSnapshot(getState(), label);
-    setSavedStates(p => [{ state_id: snapshot.state_id, label: snapshot.label, created_at: snapshot.created_at }, ...p]);
-  };
-  const handleLoadState = async (stateId) => {
-    const { loadState } = await import("@/lib/storage");
-    const snapshot = await loadState(stateId);
-    if (snapshot?.state) loadStateData(snapshot.state);
-  };
-  const handleForkState = async (stateId) => {
-    const { loadState } = await import("@/lib/storage");
-    const snapshot = await loadState(stateId);
-    if (snapshot?.state) {
-      loadStateData(snapshot.state);
-      setDirtyPages(Array.from({ length: 22 }, (_, i) => i));
-    }
   };
 
   const charNames = brief.character_names ? brief.character_names.split(/[,\s]+/).filter(Boolean) : [];
@@ -299,9 +279,7 @@ export default function App() {
       case "images":
         return <div>
           <ImagesStep prompts={prompts} images={images} setImages={setImages} outline={outline}
-            dirtyPages={dirtyPages} settings={settings}
-            onSaveState={handleSaveState} onLoadState={handleLoadState} onForkState={handleForkState}
-            states={savedStates} />
+            dirtyPages={dirtyPages} settings={settings} />
           <div style={{ marginTop: 16, display: "flex", gap: 8 }}>
             <Btn onClick={() => { mark("images"); go("export"); }}>Go to Export →</Btn>
             <Btn ghost onClick={() => go("prompts")}>← Back to Prompts</Btn>
@@ -330,7 +308,7 @@ export default function App() {
           </div>
           <div style={{ display: "flex", gap: 6 }}>
             <button onClick={() => setSessionsOpen(true)} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 8, padding: "8px 14px", fontSize: 13, cursor: "pointer", color: T.textDim, fontFamily: "inherit" }}
-              onMouseEnter={e => e.target.style.color = T.accent} onMouseLeave={e => e.target.style.color = T.textDim}>📚 Sessions</button>
+              onMouseEnter={e => e.target.style.color = T.accent} onMouseLeave={e => e.target.style.color = T.textDim}>📚 Templates</button>
             <button onClick={() => setSettingsOpen(true)} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 8, padding: "8px 14px", fontSize: 13, cursor: "pointer", color: T.textDim, fontFamily: "inherit" }}
               onMouseEnter={e => e.target.style.color = T.accent} onMouseLeave={e => e.target.style.color = T.textDim}>⚙ Settings</button>
           </div>

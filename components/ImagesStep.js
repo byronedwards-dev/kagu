@@ -7,15 +7,14 @@ import Pill from "./ui/Pill";
 import Loader from "./ui/Loader";
 import PageHdr from "./ui/PageHdr";
 import ErrBox from "./ui/ErrBox";
-import Inp from "./ui/Inp";
 
-export default function ImagesStep({ prompts, images, setImages, outline, dirtyPages, settings, onSaveState, onLoadState, onForkState, states }) {
+export default function ImagesStep({ prompts, images, setImages, outline, dirtyPages, settings }) {
   const [selectedModel, setSelectedModel] = useState(settings?.defaultModel || "flux-2-pro");
   const [genIdx, setGenIdx] = useState(null);
   const [genErr, setGenErr] = useState(null);
   const [copied, setCopied] = useState(null);
-  const [batchProgress, setBatchProgress] = useState(null); // { current, total }
-  const [stateLabel, setStateLabel] = useState("");
+  const [batchProgress, setBatchProgress] = useState(null); // { current, total, mode }
+  const [n8nPending, setN8nPending] = useState(false); // true while waiting for n8n to return all 22
   const abortRef = useRef(null);
 
   const copyPrompt = (idx) => {
@@ -24,6 +23,65 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
     setTimeout(() => setCopied(null), 2000);
   };
 
+  // Build the full pages payload for n8n
+  const buildPagesPayload = (pageIndices) => {
+    return pageIndices.map(idx => ({
+      page_index: idx,
+      page_name: outline?.[idx]?.title_short || `Page ${idx + 1}`,
+      format: imgFmt(idx),
+      aspect_ratio: imgFmt(idx) === "spread" ? "1:2" : "1:1",
+      image_prompt: prompts[idx]?.prompt || "",
+    })).filter(p => p.image_prompt);
+  };
+
+  // Send ALL pages to n8n in one shot — n8n handles parallelism
+  const genViaN8n = async (pageIndices) => {
+    setGenErr(null);
+    setN8nPending(true);
+    setBatchProgress({ current: 0, total: pageIndices.length, mode: "n8n" });
+
+    try {
+      const ac = new AbortController();
+      abortRef.current = ac;
+
+      const res = await fetch("/api/n8n-send", {
+        method: "POST",
+        signal: ac.signal,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "batch",
+          webhook_url: settings?.n8nWebhookUrl,
+          book: { image_model: selectedModel },
+          pages: buildPagesPayload(pageIndices),
+        }),
+      });
+
+      const data = await res.json();
+      if (data.error) throw new Error(data.error);
+
+      // n8n returns results for all pages at once
+      if (data.results) {
+        setImages(prev => {
+          const next = { ...prev };
+          for (const [idxStr, result] of Object.entries(data.results)) {
+            const idx = parseInt(idxStr, 10);
+            if (!next[idx]) next[idx] = [];
+            for (const v of (result.variants || [])) {
+              next[idx] = [...next[idx], { url: v.url, model: v.model || selectedModel, ts: Date.now(), selected: false }];
+            }
+          }
+          return next;
+        });
+        setBatchProgress({ current: pageIndices.length, total: pageIndices.length, mode: "n8n" });
+      }
+    } catch (e) {
+      if (e.name !== "AbortError") setGenErr(e.message);
+    }
+    setN8nPending(false);
+    setBatchProgress(null);
+  };
+
+  // Generate a single page via direct API (fallback)
   const genOne = async (idx) => {
     setGenErr(null);
     setGenIdx(idx);
@@ -34,53 +92,20 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
       const ac = new AbortController();
       abortRef.current = ac;
 
-      // Try n8n first if webhook is configured, otherwise use direct API
-      if (settings?.n8nWebhookUrl) {
-        const res = await fetch("/api/n8n-send", {
-          method: "POST",
-          signal: ac.signal,
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            mode: "single",
-            book: { image_model: selectedModel },
-            pages: [{
-              page_index: idx,
-              page_name: outline?.[idx]?.title_short || `Page ${idx + 1}`,
-              format: imgFmt(idx),
-              aspect_ratio: imgFmt(idx) === "spread" ? "1:2" : "1:1",
-              image_prompt: p.prompt,
-            }],
-          }),
+      const result = await generateImage({
+        model: selectedModel,
+        prompt: p.prompt,
+        aspectRatio: imgFmt(idx) === "square" ? "1:1" : "1:2",
+        signal: ac.signal,
+      });
+      const url = result.image_url || result.image_data_url;
+      if (url) {
+        setImages(prev => {
+          const next = { ...prev };
+          if (!next[idx]) next[idx] = [];
+          next[idx] = [...next[idx], { url, model: selectedModel, ts: Date.now(), selected: false }];
+          return next;
         });
-        const data = await res.json();
-        if (data.error) throw new Error(data.error);
-        if (data.results?.[idx]?.variants) {
-          setImages(prev => {
-            const next = { ...prev };
-            if (!next[idx]) next[idx] = [];
-            for (const v of data.results[idx].variants) {
-              next[idx] = [...next[idx], { url: v.url, model: v.model || selectedModel, ts: Date.now(), selected: false }];
-            }
-            return next;
-          });
-        }
-      } else {
-        // Direct API fallback
-        const result = await generateImage({
-          model: selectedModel,
-          prompt: p.prompt,
-          aspectRatio: imgFmt(idx) === "square" ? "1:1" : "1:2",
-          signal: ac.signal,
-        });
-        const url = result.image_url || result.image_data_url;
-        if (url) {
-          setImages(prev => {
-            const next = { ...prev };
-            if (!next[idx]) next[idx] = [];
-            next[idx] = [...next[idx], { url, model: selectedModel, ts: Date.now(), selected: false }];
-            return next;
-          });
-        }
       }
     } catch (e) {
       if (e.name !== "AbortError") setGenErr(`Page ${idx + 1}: ${e.message}`);
@@ -88,21 +113,30 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
     setGenIdx(null);
   };
 
-  const genBatch = async (pageIndices) => {
+  // Sequential fallback for direct API (no n8n)
+  const genBatchDirect = async (pageIndices) => {
     const total = pageIndices.length;
-    setBatchProgress({ current: 0, total });
+    setBatchProgress({ current: 0, total, mode: "direct" });
     for (let i = 0; i < total; i++) {
       if (abortRef.current?.signal?.aborted) break;
-      setBatchProgress({ current: i + 1, total });
+      setBatchProgress({ current: i + 1, total, mode: "direct" });
       await genOne(pageIndices[i]);
     }
     setBatchProgress(null);
   };
 
-  const genAll = () => genBatch(Array.from({ length: prompts.length }, (_, i) => i));
-  const genDirty = () => genBatch(dirtyPages || []);
+  // "Generate All" — n8n if configured (parallel), otherwise direct API (sequential)
+  const genAll = (pageIndices) => {
+    const indices = pageIndices || Array.from({ length: prompts.length }, (_, i) => i);
+    if (settings?.n8nWebhookUrl) {
+      return genViaN8n(indices);
+    }
+    return genBatchDirect(indices);
+  };
 
-  const stopGen = () => { abortRef.current?.abort(); setGenIdx(null); setBatchProgress(null); };
+  const genDirty = () => genAll(dirtyPages || []);
+
+  const stopGen = () => { abortRef.current?.abort(); setGenIdx(null); setN8nPending(false); setBatchProgress(null); };
 
   const removeImage = (pageIdx, imgIdx) => {
     setImages(prev => {
@@ -122,13 +156,15 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
   };
 
   const totalImages = Object.values(images).reduce((s, a) => s + a.length, 0);
-  const isGenerating = genIdx !== null || batchProgress !== null;
+  const isGenerating = genIdx !== null || batchProgress !== null || n8nPending;
+  const hasN8n = !!settings?.n8nWebhookUrl;
 
   return <div>
     <h2 style={{ fontSize: 22, fontWeight: 700, color: T.text, margin: "0 0 6px" }}>Image Generation</h2>
     <p style={{ fontSize: 14, color: T.textSoft, margin: "0 0 16px" }}>
       {totalImages} image{totalImages !== 1 ? "s" : ""} generated
       {dirtyPages?.length > 0 && ` · ${dirtyPages.length} page${dirtyPages.length !== 1 ? "s" : ""} need re-generation`}
+      {hasN8n && " · n8n connected"}
     </p>
 
     {/* Model selector */}
@@ -148,55 +184,41 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
         ))}
       </div>
       <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <Btn onClick={genAll} disabled={isGenerating} small>
-          ⚡ Generate All Pages
+        <Btn onClick={() => genAll()} disabled={isGenerating} small>
+          ⚡ Generate All Pages {hasN8n ? "(parallel via n8n)" : "(sequential)"}
         </Btn>
         {dirtyPages?.length > 0 && (
           <Btn onClick={genDirty} disabled={isGenerating} small ghost>
-            ⚡ Generate Dirty Pages Only ({dirtyPages.length})
+            ⚡ Dirty Only ({dirtyPages.length})
           </Btn>
         )}
         {isGenerating && <Btn ghost small danger onClick={stopGen}>■ Stop</Btn>}
       </div>
+      {!hasN8n && <div style={{ marginTop: 8, fontSize: 11, color: T.textDim }}>
+        Tip: Connect n8n in Settings → Connections to generate all 22 pages in parallel instead of one-by-one.
+      </div>}
       {/* Progress bar */}
       {batchProgress && <div style={{ marginTop: 10 }}>
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: T.textSoft, marginBottom: 4 }}>
-          <span>Generating page {batchProgress.current} of {batchProgress.total}...</span>
+          <span>
+            {batchProgress.mode === "n8n"
+              ? (n8nPending ? "Waiting for n8n (all 22 pages generating in parallel)..." : `Done — ${batchProgress.current} pages`)
+              : `Generating page ${batchProgress.current} of ${batchProgress.total}...`}
+          </span>
           <span>{Math.round(batchProgress.current / batchProgress.total * 100)}%</span>
         </div>
         <div style={{ height: 4, background: T.border, borderRadius: 2 }}>
-          <div style={{ height: 4, background: T.accent, borderRadius: 2, width: `${batchProgress.current / batchProgress.total * 100}%`, transition: "width .3s" }} />
+          <div style={{
+            height: 4, background: n8nPending ? T.amber : T.accent, borderRadius: 2,
+            width: n8nPending ? "100%" : `${batchProgress.current / batchProgress.total * 100}%`,
+            transition: "width .3s",
+            animation: n8nPending ? "sp .7s linear infinite" : "none",
+          }} />
         </div>
       </div>}
     </div>
 
     {genErr && <ErrBox msg={genErr} onDismiss={() => setGenErr(null)} />}
-
-    {/* State management */}
-    <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 12, padding: 16, marginBottom: 16 }}>
-      <div style={{ fontSize: 12, fontWeight: 700, color: T.textSoft, marginBottom: 10, textTransform: "uppercase", letterSpacing: .5 }}>State Management</div>
-      <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-        <Inp value={stateLabel} onChange={setStateLabel} placeholder="Label this state..." style={{ flex: 1, minWidth: 200 }} />
-        <Btn small onClick={() => { if (stateLabel.trim()) { onSaveState(stateLabel); setStateLabel(""); } }} disabled={!stateLabel.trim()}>💾 Save State</Btn>
-      </div>
-      {states?.length > 0 && <div style={{ marginTop: 10 }}>
-        <div style={{ fontSize: 12, color: T.textDim, marginBottom: 6 }}>Saved states:</div>
-        <div style={{ display: "grid", gap: 4 }}>
-          {states.slice(0, 5).map(s => (
-            <div key={s.state_id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 10px", borderRadius: 6, border: `1px solid ${T.border}`, fontSize: 12 }}>
-              <div>
-                <span style={{ color: T.text, fontWeight: 600 }}>{s.label}</span>
-                <span style={{ color: T.textDim, marginLeft: 8 }}>{new Date(s.created_at).toLocaleString()}</span>
-              </div>
-              <div style={{ display: "flex", gap: 4 }}>
-                <Btn small ghost onClick={() => onLoadState(s.state_id)}>Load</Btn>
-                <Btn small ghost onClick={() => onForkState(s.state_id)}>Fork</Btn>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>}
-    </div>
 
     {/* Per-page cards */}
     <div style={{ display: "grid", gap: 8 }}>
