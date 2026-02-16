@@ -1,7 +1,7 @@
 "use client";
 import { useState, useRef } from "react";
 import { T, imgFmt } from "@/lib/constants";
-import { generateImage, IMAGE_MODELS } from "@/lib/api";
+import { IMAGE_MODELS } from "@/lib/api";
 import Btn from "./ui/Btn";
 import Pill from "./ui/Pill";
 import Loader from "./ui/Loader";
@@ -10,11 +10,10 @@ import ErrBox from "./ui/ErrBox";
 
 export default function ImagesStep({ prompts, images, setImages, outline, dirtyPages, settings }) {
   const [selectedModel, setSelectedModel] = useState(settings?.defaultModel || "flux-2-pro");
-  const [genIdx, setGenIdx] = useState(null);
   const [genErr, setGenErr] = useState(null);
   const [copied, setCopied] = useState(null);
-  const [batchProgress, setBatchProgress] = useState(null); // { current, total, mode }
-  const [n8nPending, setN8nPending] = useState(false); // true while waiting for n8n to return all 22
+  const [pending, setPending] = useState(false);
+  const [pendingPages, setPendingPages] = useState(null); // which page indices are generating
   const abortRef = useRef(null);
 
   const copyPrompt = (idx) => {
@@ -23,7 +22,7 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
     setTimeout(() => setCopied(null), 2000);
   };
 
-  // Build the full pages payload for n8n
+  // Build pages payload for n8n
   const buildPagesPayload = (pageIndices) => {
     return pageIndices.map(idx => ({
       page_index: idx,
@@ -34,11 +33,16 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
     })).filter(p => p.image_prompt);
   };
 
-  // Send ALL pages to n8n in one shot — n8n handles parallelism
-  const genViaN8n = async (pageIndices) => {
+  // Send pages to n8n — works for 1 page or all 22
+  const generate = async (pageIndices) => {
+    if (!settings?.n8nWebhookUrl) {
+      setGenErr("n8n webhook URL not configured. Go to Settings → Connections to set it up.");
+      return;
+    }
+
     setGenErr(null);
-    setN8nPending(true);
-    setBatchProgress({ current: 0, total: pageIndices.length, mode: "n8n" });
+    setPending(true);
+    setPendingPages(pageIndices);
 
     try {
       const ac = new AbortController();
@@ -49,8 +53,8 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
         signal: ac.signal,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          mode: "batch",
-          webhook_url: settings?.n8nWebhookUrl,
+          mode: pageIndices.length === 1 ? "single" : "batch",
+          webhook_url: settings.n8nWebhookUrl,
           book: { image_model: selectedModel },
           pages: buildPagesPayload(pageIndices),
         }),
@@ -59,7 +63,7 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
       const data = await res.json();
       if (data.error) throw new Error(data.error);
 
-      // n8n returns results for all pages at once
+      // n8n returns results keyed by page index
       if (data.results) {
         setImages(prev => {
           const next = { ...prev };
@@ -72,71 +76,19 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
           }
           return next;
         });
-        setBatchProgress({ current: pageIndices.length, total: pageIndices.length, mode: "n8n" });
       }
     } catch (e) {
       if (e.name !== "AbortError") setGenErr(e.message);
     }
-    setN8nPending(false);
-    setBatchProgress(null);
+    setPending(false);
+    setPendingPages(null);
   };
 
-  // Generate a single page via direct API (fallback)
-  const genOne = async (idx) => {
-    setGenErr(null);
-    setGenIdx(idx);
-    const p = prompts[idx];
-    if (!p?.prompt) { setGenIdx(null); return; }
+  const genAll = () => generate(Array.from({ length: prompts.length }, (_, i) => i));
+  const genDirty = () => generate(dirtyPages || []);
+  const genSingle = (idx) => generate([idx]);
 
-    try {
-      const ac = new AbortController();
-      abortRef.current = ac;
-
-      const result = await generateImage({
-        model: selectedModel,
-        prompt: p.prompt,
-        aspectRatio: imgFmt(idx) === "square" ? "1:1" : "1:2",
-        signal: ac.signal,
-      });
-      const url = result.image_url || result.image_data_url;
-      if (url) {
-        setImages(prev => {
-          const next = { ...prev };
-          if (!next[idx]) next[idx] = [];
-          next[idx] = [...next[idx], { url, model: selectedModel, ts: Date.now(), selected: false }];
-          return next;
-        });
-      }
-    } catch (e) {
-      if (e.name !== "AbortError") setGenErr(`Page ${idx + 1}: ${e.message}`);
-    }
-    setGenIdx(null);
-  };
-
-  // Sequential fallback for direct API (no n8n)
-  const genBatchDirect = async (pageIndices) => {
-    const total = pageIndices.length;
-    setBatchProgress({ current: 0, total, mode: "direct" });
-    for (let i = 0; i < total; i++) {
-      if (abortRef.current?.signal?.aborted) break;
-      setBatchProgress({ current: i + 1, total, mode: "direct" });
-      await genOne(pageIndices[i]);
-    }
-    setBatchProgress(null);
-  };
-
-  // "Generate All" — n8n if configured (parallel), otherwise direct API (sequential)
-  const genAll = (pageIndices) => {
-    const indices = pageIndices || Array.from({ length: prompts.length }, (_, i) => i);
-    if (settings?.n8nWebhookUrl) {
-      return genViaN8n(indices);
-    }
-    return genBatchDirect(indices);
-  };
-
-  const genDirty = () => genAll(dirtyPages || []);
-
-  const stopGen = () => { abortRef.current?.abort(); setGenIdx(null); setN8nPending(false); setBatchProgress(null); };
+  const stopGen = () => { abortRef.current?.abort(); setPending(false); setPendingPages(null); };
 
   const removeImage = (pageIdx, imgIdx) => {
     setImages(prev => {
@@ -156,7 +108,6 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
   };
 
   const totalImages = Object.values(images).reduce((s, a) => s + a.length, 0);
-  const isGenerating = genIdx !== null || batchProgress !== null || n8nPending;
   const hasN8n = !!settings?.n8nWebhookUrl;
 
   return <div>
@@ -164,7 +115,7 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
     <p style={{ fontSize: 14, color: T.textSoft, margin: "0 0 16px" }}>
       {totalImages} image{totalImages !== 1 ? "s" : ""} generated
       {dirtyPages?.length > 0 && ` · ${dirtyPages.length} page${dirtyPages.length !== 1 ? "s" : ""} need re-generation`}
-      {hasN8n && " · n8n connected"}
+      {hasN8n ? " · n8n connected" : " · n8n not configured"}
     </p>
 
     {/* Model selector */}
@@ -184,35 +135,33 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
         ))}
       </div>
       <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <Btn onClick={() => genAll()} disabled={isGenerating} small>
-          ⚡ Generate All Pages {hasN8n ? "(parallel via n8n)" : "(sequential)"}
+        <Btn onClick={genAll} disabled={pending || !hasN8n} small>
+          ⚡ Generate All Pages
         </Btn>
         {dirtyPages?.length > 0 && (
-          <Btn onClick={genDirty} disabled={isGenerating} small ghost>
+          <Btn onClick={genDirty} disabled={pending || !hasN8n} small ghost>
             ⚡ Dirty Only ({dirtyPages.length})
           </Btn>
         )}
-        {isGenerating && <Btn ghost small danger onClick={stopGen}>■ Stop</Btn>}
+        {pending && <Btn ghost small danger onClick={stopGen}>■ Stop</Btn>}
       </div>
-      {!hasN8n && <div style={{ marginTop: 8, fontSize: 11, color: T.textDim }}>
-        Tip: Connect n8n in Settings → Connections to generate all 22 pages in parallel instead of one-by-one.
+      {!hasN8n && <div style={{ marginTop: 8, fontSize: 12, color: T.amber, fontWeight: 600 }}>
+        Set your n8n webhook URL in Settings → Connections to enable image generation.
       </div>}
-      {/* Progress bar */}
-      {batchProgress && <div style={{ marginTop: 10 }}>
+      {/* Progress indicator */}
+      {pending && <div style={{ marginTop: 10 }}>
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: T.textSoft, marginBottom: 4 }}>
           <span>
-            {batchProgress.mode === "n8n"
-              ? (n8nPending ? "Waiting for n8n (all 22 pages generating in parallel)..." : `Done — ${batchProgress.current} pages`)
-              : `Generating page ${batchProgress.current} of ${batchProgress.total}...`}
+            {pendingPages?.length === 1
+              ? `Generating page ${pendingPages[0] + 1} via n8n...`
+              : `Generating ${pendingPages?.length || "all"} pages in parallel via n8n...`}
           </span>
-          <span>{Math.round(batchProgress.current / batchProgress.total * 100)}%</span>
         </div>
         <div style={{ height: 4, background: T.border, borderRadius: 2 }}>
           <div style={{
-            height: 4, background: n8nPending ? T.amber : T.accent, borderRadius: 2,
-            width: n8nPending ? "100%" : `${batchProgress.current / batchProgress.total * 100}%`,
-            transition: "width .3s",
-            animation: n8nPending ? "sp .7s linear infinite" : "none",
+            height: 4, background: T.amber, borderRadius: 2,
+            width: "100%",
+            animation: "sp .7s linear infinite",
           }} />
         </div>
       </div>}
@@ -224,11 +173,11 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
     <div style={{ display: "grid", gap: 8 }}>
       {prompts.map((p, i) => {
         const pageImages = images[i] || [];
-        const isPageGenerating = genIdx === i;
+        const isPagePending = pending && pendingPages?.includes(i);
         const isDirty = dirtyPages?.includes(i);
 
         return <div key={i} style={{
-          background: T.card, border: `1px solid ${isPageGenerating ? T.accent : isDirty ? T.amber : T.border}`,
+          background: T.card, border: `1px solid ${isPagePending ? T.accent : isDirty ? T.amber : T.border}`,
           borderRadius: 10, padding: 14,
         }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
@@ -242,11 +191,11 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
                 borderRadius: 6, padding: "4px 10px", fontSize: 11, fontWeight: 600,
                 color: copied === i ? T.accent : T.textDim, cursor: "pointer", fontFamily: "inherit",
               }}>{copied === i ? "✓ Copied" : "📋 Copy"}</button>
-              <button onClick={() => genOne(i)} disabled={isGenerating} style={{
+              <button onClick={() => genSingle(i)} disabled={pending || !hasN8n} style={{
                 background: T.accentBg, border: `1px solid rgba(139,124,247,0.3)`,
                 borderRadius: 6, padding: "4px 10px", fontSize: 11, fontWeight: 600,
-                color: T.accent, cursor: isGenerating ? "not-allowed" : "pointer", fontFamily: "inherit",
-                opacity: isGenerating ? 0.5 : 1,
+                color: T.accent, cursor: pending || !hasN8n ? "not-allowed" : "pointer", fontFamily: "inherit",
+                opacity: pending || !hasN8n ? 0.5 : 1,
               }}>⚡ Generate</button>
             </div>
           </div>
@@ -259,7 +208,7 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
             <p style={{ fontSize: 12, color: T.textSoft, lineHeight: 1.5, margin: "6px 0 0", whiteSpace: "pre-wrap" }}>{p.prompt || "—"}</p>
           </details>
 
-          {isPageGenerating && <Loader text={`Generating with ${selectedModel}`} />}
+          {isPagePending && <Loader text={`Generating via n8n (${selectedModel})`} />}
 
           {/* Image gallery */}
           {pageImages.length > 0 && (
