@@ -4,10 +4,7 @@
 // then POSTs results back to /api/n8n-callback when done.
 
 import { randomUUID } from "crypto";
-
-// In-memory job store (shared with n8n-callback and n8n-results routes)
-// In production, replace with Redis/DB if you need persistence across deploys
-if (!globalThis.__n8nJobs) globalThis.__n8nJobs = {};
+import { setJob } from "@/lib/jobStore";
 
 export async function POST(request) {
   const envUrl = process.env.N8N_WEBHOOK_URL || process.env.NEXT_PUBLIC_N8N_WEBHOOK_URL;
@@ -27,14 +24,14 @@ export async function POST(request) {
     const jobId = randomUUID();
     const pageIndices = (body.pages || []).map(p => p.page_index);
 
-    // Store job in memory
-    globalThis.__n8nJobs[jobId] = {
+    // Store job to filesystem
+    setJob(jobId, {
       status: "processing",
       created: Date.now(),
       totalPages: pageIndices.length,
       completedPages: 0,
       results: {},
-    };
+    });
 
     // Determine the callback URL for n8n to POST results back to
     const host = request.headers.get("host") || "localhost:3000";
@@ -54,10 +51,8 @@ export async function POST(request) {
       }),
     }).catch(err => {
       // Mark job as failed if webhook send fails
-      if (globalThis.__n8nJobs[jobId]) {
-        globalThis.__n8nJobs[jobId].status = "error";
-        globalThis.__n8nJobs[jobId].error = err.message;
-      }
+      const { updateJob } = require("@/lib/jobStore");
+      updateJob(jobId, job => ({ ...job, status: "error", error: err.message }));
     });
 
     // Return immediately with job_id

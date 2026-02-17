@@ -2,23 +2,25 @@
 // Frontend polls this to check job progress and get completed images.
 // Returns: { status, completedPages, totalPages, results }
 
-if (!globalThis.__n8nJobs) globalThis.__n8nJobs = {};
+import { getJob, cleanOldJobs } from "@/lib/jobStore";
+
+export const dynamic = "force-dynamic";
 
 export async function GET(request) {
   const { searchParams } = new URL(request.url);
   const jobId = searchParams.get("job_id");
 
-  if (!jobId || !globalThis.__n8nJobs[jobId]) {
+  if (!jobId) {
+    return Response.json({ error: "job_id required" }, { status: 400 });
+  }
+
+  const job = getJob(jobId);
+  if (!job) {
     return Response.json({ error: "Unknown job_id" }, { status: 404 });
   }
 
-  const job = globalThis.__n8nJobs[jobId];
-
-  // Clean up old jobs (older than 1 hour)
-  const now = Date.now();
-  for (const [id, j] of Object.entries(globalThis.__n8nJobs)) {
-    if (now - j.created > 3600000) delete globalThis.__n8nJobs[id];
-  }
+  // Occasionally clean old jobs
+  if (Math.random() < 0.05) cleanOldJobs();
 
   return Response.json({
     status: job.status,
