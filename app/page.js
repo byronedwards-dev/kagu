@@ -286,6 +286,11 @@ export default function App() {
     setDirtyPages(p => p.includes(i) ? p : [...p, i]);
   };
 
+  const manualPrompt = (i, text) => {
+    setPrompts(p => p.map((x, j) => j === i ? { ...x, prompt: text } : x));
+    setDirtyPages(p => p.includes(i) ? p : [...p, i]);
+  };
+
   const genPrompts = async () => {
     setErr(null); setLoading(true); cancelledRef.current = false; go("prompts"); mark("text");
     setPrompts([]);
@@ -346,7 +351,7 @@ export default function App() {
           onRegenText={genText} charNames={charNames} />;
       case "prompts":
         return <PromptCards prompts={prompts} loading={loading} lidx={lidx} onAI={editPrompt} onRegenOne={regenOnePrompt}
-          promptsStale={promptsStale} onGenPrompts={genPrompts}
+          onSave={manualPrompt} promptsStale={promptsStale} onGenPrompts={genPrompts}
           onGoImages={() => { mark("prompts"); go("images"); }}
           bannedWords={rules.bannedWords} chars={chars} />;
       case "images":
