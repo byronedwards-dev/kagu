@@ -20,15 +20,20 @@ function hasAspectHint(prompt, idx) {
 }
 
 // Format a raw prompt with line breaks for readability.
-// Breaks only at major structural boundaries: character blocks and camera/framing.
+// Breaks at character description blocks and camera/framing sections.
 // This is display-only — the raw prompt is what gets sent to the API.
 function formatPrompt(raw) {
   if (!raw) return "—";
   let f = raw;
-  // Break before bold character markers: **Name (Role):**
+  // Break before bold character markers: **Name ...**
   f = f.replace(/\s+(\*\*[A-Z])/g, "\n\n$1");
+  // Break before character name introductions without bold (e.g., "Max is a small", "Buddy is a tiny")
+  // Match: sentence-ending punctuation + space + Capitalized Name + " is a "
+  f = f.replace(/([.!])\s+([A-Z][a-z]+ (?:is a|wears|has|stands|sits))/g, "$1\n\n$2");
   // Break before CAMERA/FRAMING or CAMERA: sections
   f = f.replace(/\s+(CAMERA[/:])/g, "\n\n$1");
+  // Break before action descriptions that start a new visual beat
+  f = f.replace(/([.!])\s+((?:The scene|The background|The setting|The lighting|Gentle|Soft|Warm|Golden|Dramatic) )/g, "$1\n\n$2");
   return f.trim();
 }
 

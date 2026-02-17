@@ -99,7 +99,8 @@ export default function App() {
   // ─── Auto-save ───
   const getState = useCallback(() => ({
     brief, concepts, selConcept, chars, outline, text, prompts, images, step, done: [...done], dirtyPages, rules,
-  }), [brief, concepts, selConcept, chars, outline, text, prompts, images, step, done, dirtyPages, rules]);
+    outlineHash, textOutlineHash,
+  }), [brief, concepts, selConcept, chars, outline, text, prompts, images, step, done, dirtyPages, rules, outlineHash, textOutlineHash]);
 
   useEffect(() => {
     const t = setTimeout(async () => {
@@ -133,6 +134,8 @@ export default function App() {
     if (s.done) setDone(new Set(s.done));
     if (s.dirtyPages) setDirtyPages(s.dirtyPages);
     if (s.rules) setRules(s.rules);
+    if (s.outlineHash) setOutlineHash(s.outlineHash);
+    if (s.textOutlineHash) setTextOutlineHash(s.textOutlineHash);
     setTextStale(false); setPromptsStale(false);
   };
 
