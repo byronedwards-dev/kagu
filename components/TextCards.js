@@ -64,20 +64,24 @@ export default function TextCards({ text, outline, loading, lidx, onAI, onSave, 
 
   if (loading && !text.length) return <><h2 style={{ fontSize: 22, fontWeight: 700, color: T.text }}>Story Text</h2><Loader text="Writing story" /></>;
   return <div>
-    <h2 style={{ fontSize: 22, fontWeight: 700, color: T.text, margin: "0 0 6px" }}>Story Text</h2>
-    <p style={{ fontSize: 14, color: T.textSoft, margin: "0 0 16px" }}>{totalWords} words total · Click to edit text or scene</p>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
+      <div>
+        <h2 style={{ fontSize: 22, fontWeight: 700, color: T.text, margin: "0 0 6px" }}>Story Text</h2>
+        <p style={{ fontSize: 14, color: T.textSoft, margin: 0 }}>{totalWords} words total · Click to edit text or scene</p>
+      </div>
+      {!loading && text.length > 0 && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", flexShrink: 0 }}>
+        {prompts.length > 0
+          ? <Btn small onClick={onViewPrompts}>View Prompts →</Btn>
+          : <Btn small onClick={onGenPrompts}>Gen Prompts →</Btn>
+        }
+        <Btn small ghost onClick={onRegenText}>↻ Regen Copy</Btn>
+        <Btn small ghost onClick={onRegenOutline}>↻ Regen Scenes</Btn>
+      </div>}
+    </div>
     {textStale && <StaleWarning msg="Outline has changed since this text was generated. Consider regenerating." />}
     <div style={{ display: "grid", gap: 6 }}>
       {text.map((p, i) => <TCard key={i} page={p} op={outline?.[i]} idx={i} lidx={lidx} onAI={onAI} onSave={onSave} onSaveScene={onSaveScene} charNames={charNames} />)}
     </div>
     {loading && <Loader text="Generating next batch" />}
-    {!loading && text.length > 0 && <div style={{ marginTop: 16, display: "flex", gap: 8, flexWrap: "wrap" }}>
-      {prompts.length > 0
-        ? <><Btn onClick={onViewPrompts}>View Image Prompts →</Btn><Btn ghost onClick={onGenPrompts}>↻ Regen Prompts</Btn></>
-        : <Btn onClick={onGenPrompts}>Generate Image Prompts →</Btn>
-      }
-      <Btn ghost onClick={onRegenText}>↻ Regen Copy</Btn>
-      <Btn ghost onClick={onRegenOutline}>↻ Regen Scenes</Btn>
-    </div>}
   </div>;
 }
