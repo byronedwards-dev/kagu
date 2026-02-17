@@ -20,51 +20,16 @@ function hasAspectHint(prompt, idx) {
 }
 
 // Format a raw prompt with line breaks for readability.
-// Inserts breaks before common section markers (style, lighting, mood, camera, etc.)
+// Breaks only at major structural boundaries: character blocks and camera/framing.
 // This is display-only — the raw prompt is what gets sent to the API.
 function formatPrompt(raw) {
   if (!raw) return "—";
-  // Split on period-space or comma-space before known section keywords
-  const sectionKeywords = [
-    "style:", "lighting:", "mood:", "camera:", "composition:",
-    "aspect ratio:", "resolution:", "format:", "render",
-    "the scene", "the background", "the setting", "in the foreground",
-    "in the background", "the character", "shot type:",
-    "color palette:", "atmosphere:", "technical:",
-  ];
-  let formatted = raw;
-  for (const kw of sectionKeywords) {
-    // Insert a newline before the keyword if preceded by ". " or ", "
-    const regex = new RegExp(`([.,])\\s+(?=${kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, "gi");
-    formatted = formatted.replace(regex, "$1\n\n");
-  }
-  // Also break on ". " followed by a capital letter after a long run (100+ chars without break)
-  const lines = formatted.split("\n");
-  const result = [];
-  for (const line of lines) {
-    if (line.length > 200) {
-      // Split long lines at sentence boundaries
-      const sentences = line.split(/(?<=\.)\s+(?=[A-Z])/);
-      if (sentences.length > 1) {
-        // Group sentences into chunks of ~2-3 for readability
-        let chunk = "";
-        for (const s of sentences) {
-          if (chunk.length > 0 && chunk.length + s.length > 180) {
-            result.push(chunk.trim());
-            chunk = s;
-          } else {
-            chunk += (chunk ? " " : "") + s;
-          }
-        }
-        if (chunk) result.push(chunk.trim());
-      } else {
-        result.push(line);
-      }
-    } else {
-      result.push(line);
-    }
-  }
-  return result.join("\n\n");
+  let f = raw;
+  // Break before bold character markers: **Name (Role):**
+  f = f.replace(/\s+(\*\*[A-Z])/g, "\n\n$1");
+  // Break before CAMERA/FRAMING or CAMERA: sections
+  f = f.replace(/\s+(CAMERA[/:])/g, "\n\n$1");
+  return f.trim();
 }
 
 function PCard({ prompt, idx, lidx, onAI, onRegenOne, onSave, bannedWords, chars }) {

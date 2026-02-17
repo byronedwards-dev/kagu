@@ -75,7 +75,7 @@ export default function TextCards({ text, outline, loading, lidx, onAI, onSave, 
           : <Btn small onClick={onGenPrompts}>Gen Prompts →</Btn>
         }
         <Btn small ghost onClick={onRegenText}>↻ Regen Copy</Btn>
-        <Btn small ghost onClick={onRegenOutline}>↻ Regen Outline</Btn>
+        <Btn small ghost onClick={onRegenOutline}>↻ Regen Scene</Btn>
       </div>}
     </div>
     {textStale && <StaleWarning msg="Outline has changed since this text was generated. Consider regenerating." />}
