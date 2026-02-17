@@ -22,11 +22,20 @@ export async function GET(request) {
   // Occasionally clean old jobs
   if (Math.random() < 0.05) cleanOldJobs();
 
+  // Auto-timeout: if job has been processing for over 5 minutes, mark it as timed out
+  const JOB_TIMEOUT = 5 * 60 * 1000;
+  let status = job.status;
+  let error = job.error || null;
+  if (status === "processing" && job.created && (Date.now() - job.created > JOB_TIMEOUT)) {
+    status = "error";
+    error = "Job timed out after 5 minutes. Check your n8n workflow for errors (bad API responses, missing credentials, etc.).";
+  }
+
   return Response.json({
-    status: job.status,
+    status,
     completedPages: job.completedPages,
     totalPages: job.totalPages,
     results: job.results,
-    error: job.error || null,
+    error,
   });
 }

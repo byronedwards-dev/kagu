@@ -39,20 +39,32 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
   const startPolling = useCallback((jid, pageIndices) => {
     if (pollRef.current) clearInterval(pollRef.current);
 
+    const pollStartTime = Date.now();
+    const POLL_TIMEOUT = 5 * 60 * 1000; // 5 minute timeout
+
+    const stopPoll = (errMsg) => {
+      clearInterval(pollRef.current);
+      pollRef.current = null;
+      setPending(false);
+      setPendingPages(null);
+      setProgress(null);
+      setJobId(null);
+      if (errMsg) setGenErr(errMsg);
+    };
+
     pollRef.current = setInterval(async () => {
+      // Timeout check — if polling longer than 5 minutes, give up
+      if (Date.now() - pollStartTime > POLL_TIMEOUT) {
+        stopPoll("Generation timed out after 5 minutes. Check your n8n workflow for errors.");
+        return;
+      }
+
       try {
         const res = await fetch(`/api/n8n-results?job_id=${jid}`);
         const data = await res.json();
 
         if (data.error && res.status === 404) {
-          // Job not found — might have been cleaned up
-          clearInterval(pollRef.current);
-          pollRef.current = null;
-          setPending(false);
-          setPendingPages(null);
-          setProgress(null);
-          setJobId(null);
-          setGenErr("Job not found — it may have expired. Try generating again.");
+          stopPoll("Job not found — it may have expired. Try generating again.");
           return;
         }
 
@@ -79,20 +91,9 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
 
         // Check if done or errored
         if (data.status === "done") {
-          clearInterval(pollRef.current);
-          pollRef.current = null;
-          setPending(false);
-          setPendingPages(null);
-          setProgress(null);
-          setJobId(null);
+          stopPoll(null);
         } else if (data.status === "error") {
-          clearInterval(pollRef.current);
-          pollRef.current = null;
-          setPending(false);
-          setPendingPages(null);
-          setProgress(null);
-          setJobId(null);
-          setGenErr(data.error || "n8n job failed");
+          stopPoll(data.error || "n8n job failed");
         }
       } catch (e) {
         // Network error — keep polling, don't give up
