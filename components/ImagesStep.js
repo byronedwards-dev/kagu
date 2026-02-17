@@ -16,6 +16,7 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
   const [pendingPages, setPendingPages] = useState(null);
   const [progress, setProgress] = useState(null); // { completed, total }
   const [jobId, setJobId] = useState(null);
+  const [lightbox, setLightbox] = useState(null); // { url, pageIdx, imgIdx }
   const pollRef = useRef(null);
 
   const copyPrompt = (idx) => {
@@ -174,6 +175,17 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
     });
   };
 
+  const downloadImage = (url, pageIdx, model) => {
+    const a = document.createElement("a");
+    a.href = url;
+    const pageName = outline?.[pageIdx]?.title_short || `page-${pageIdx + 1}`;
+    const slug = pageName.replace(/[^a-z0-9]+/gi, "-").toLowerCase();
+    a.download = `${slug}-${model || "image"}.png`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
   const totalImages = Object.values(images).reduce((s, a) => s + a.length, 0);
   const hasN8n = !!settings?.n8nWebhookUrl;
   const pct = progress ? Math.round(progress.completed / progress.total * 100) : 0;
@@ -285,33 +297,39 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
 
           {/* Image gallery */}
           {pageImages.length > 0 && (
-            <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingTop: 4 }}>
+            <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingTop: 4 }}>
               {pageImages.map((img, j) => (
                 <div key={j} style={{ position: "relative", flexShrink: 0 }}>
                   <img
                     src={img.url}
                     alt={`Page ${i + 1} variant ${j + 1}`}
+                    onClick={() => setLightbox({ url: img.url, pageIdx: i, imgIdx: j })}
                     style={{
-                      width: imgFmt(i) === "spread" ? 280 : 160,
-                      height: 160,
+                      width: imgFmt(i) === "spread" ? 480 : 280,
+                      height: 280,
                       objectFit: "cover",
-                      borderRadius: 8,
+                      borderRadius: 10,
                       border: img.selected ? `2px solid ${T.accent}` : `1px solid ${T.border}`,
+                      cursor: "pointer",
                     }}
                   />
                   <div style={{
-                    position: "absolute", bottom: 4, left: 4,
-                    background: "rgba(0,0,0,.7)", borderRadius: 4, padding: "2px 6px",
-                    fontSize: 10, color: T.textSoft,
+                    position: "absolute", bottom: 6, left: 6,
+                    background: "rgba(0,0,0,.7)", borderRadius: 4, padding: "2px 8px",
+                    fontSize: 11, color: T.textSoft,
                   }}>{img.model}</div>
-                  <div style={{ position: "absolute", top: 4, right: 4, display: "flex", gap: 2 }}>
+                  <div style={{ position: "absolute", top: 6, right: 6, display: "flex", gap: 3 }}>
+                    <button onClick={() => downloadImage(img.url, i, img.model)} style={{
+                      background: "rgba(0,0,0,.7)", border: "none", borderRadius: 4,
+                      padding: "3px 8px", fontSize: 11, color: T.textDim, cursor: "pointer",
+                    }} title="Download">⬇</button>
                     <button onClick={() => selectImage(i, j)} style={{
                       background: img.selected ? T.accent : "rgba(0,0,0,.7)", border: "none", borderRadius: 4,
-                      padding: "2px 6px", fontSize: 10, color: img.selected ? "#fff" : T.textDim, cursor: "pointer",
+                      padding: "3px 8px", fontSize: 11, color: img.selected ? "#fff" : T.textDim, cursor: "pointer",
                     }}>{img.selected ? "★" : "☆"}</button>
                     <button onClick={() => removeImage(i, j)} style={{
                       background: "rgba(0,0,0,.7)", border: "none", borderRadius: 4,
-                      padding: "2px 6px", fontSize: 12, color: T.textDim, cursor: "pointer",
+                      padding: "3px 8px", fontSize: 13, color: T.textDim, cursor: "pointer",
                     }}>✕</button>
                   </div>
                 </div>
@@ -321,5 +339,52 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
         </div>;
       })}
     </div>
+
+    {/* Lightbox modal */}
+    {lightbox && (
+      <div
+        onClick={() => setLightbox(null)}
+        style={{
+          position: "fixed", inset: 0, zIndex: 9999,
+          background: "rgba(0,0,0,.85)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          cursor: "zoom-out",
+        }}
+      >
+        <div onClick={e => e.stopPropagation()} style={{ position: "relative", maxWidth: "90vw", maxHeight: "90vh" }}>
+          <img
+            src={lightbox.url}
+            alt="Full size preview"
+            style={{
+              maxWidth: "90vw", maxHeight: "90vh",
+              objectFit: "contain", borderRadius: 12,
+              boxShadow: "0 8px 40px rgba(0,0,0,.5)",
+            }}
+          />
+          <div style={{ position: "absolute", top: -12, right: -12, display: "flex", gap: 6 }}>
+            <button
+              onClick={() => {
+                const img = images[lightbox.pageIdx]?.[lightbox.imgIdx];
+                if (img) downloadImage(img.url, lightbox.pageIdx, img.model);
+              }}
+              style={{
+                background: T.card, border: `1px solid ${T.border}`, borderRadius: "50%",
+                width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 14, color: T.text, cursor: "pointer", fontFamily: "inherit",
+              }}
+              title="Download"
+            >⬇</button>
+            <button
+              onClick={() => setLightbox(null)}
+              style={{
+                background: T.card, border: `1px solid ${T.border}`, borderRadius: "50%",
+                width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: 16, color: T.text, cursor: "pointer", fontFamily: "inherit",
+              }}
+            >✕</button>
+          </div>
+        </div>
+      </div>
+    )}
   </div>;
 }
