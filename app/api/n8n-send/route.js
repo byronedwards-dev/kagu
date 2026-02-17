@@ -1,10 +1,10 @@
 // POST /api/n8n-send
-// Fire-and-forget: sends pages to n8n webhook, returns immediately with a job_id.
-// n8n responds immediately (webhook set to "Immediately"), processes images async,
-// then POSTs results back to /api/n8n-callback when done.
+// Sends pages to n8n webhook and returns immediately with a job_id.
+// n8n webhook should be set to "Respond Immediately".
+// n8n processes images async, then POSTs results back to /api/n8n-callback.
 
 import { randomUUID } from "crypto";
-import { setJob } from "@/lib/jobStore";
+import { setJob, updateJob } from "@/lib/jobStore";
 
 export async function POST(request) {
   const envUrl = process.env.N8N_WEBHOOK_URL || process.env.NEXT_PUBLIC_N8N_WEBHOOK_URL;
@@ -38,24 +38,30 @@ export async function POST(request) {
     const proto = request.headers.get("x-forwarded-proto") || "https";
     const callbackUrl = `${proto}://${host}/api/n8n-callback?job_id=${jobId}`;
 
-    // Fire and forget — don't await
-    fetch(webhookUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        job_id: jobId,
-        callback_url: callbackUrl,
-        mode: body.mode || "single",
-        book: body.book || {},
-        pages: body.pages || [],
-      }),
-    }).catch(err => {
-      // Mark job as failed if webhook send fails
-      const { updateJob } = require("@/lib/jobStore");
-      updateJob(jobId, job => ({ ...job, status: "error", error: err.message }));
-    });
+    // Send to n8n — await the initial response but don't wait for processing
+    // n8n responds immediately, then processes in background
+    try {
+      const n8nRes = await fetch(webhookUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          job_id: jobId,
+          callback_url: callbackUrl,
+          mode: body.mode || "single",
+          book: body.book || {},
+          pages: body.pages || [],
+        }),
+      });
 
-    // Return immediately with job_id
+      if (!n8nRes.ok) {
+        const errText = await n8nRes.text().catch(() => "");
+        updateJob(jobId, job => ({ ...job, status: "error", error: `n8n returned ${n8nRes.status}: ${errText}` }));
+      }
+    } catch (err) {
+      updateJob(jobId, job => ({ ...job, status: "error", error: err.message }));
+    }
+
+    // Return with job_id (even if n8n had an error, frontend will pick it up via polling)
     return Response.json({ job_id: jobId, status: "processing", totalPages: pageIndices.length });
   } catch (err) {
     return Response.json({ error: err.message }, { status: 500 });
