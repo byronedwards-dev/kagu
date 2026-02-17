@@ -151,18 +151,24 @@ export default function App() {
         : `"title", "premise", "structure" (ONLY "arc"/"pattern"/"hybrid"), "key_moments"`;
     const charNote = !hasSecondChar ? `\nIMPORTANT: The story has ONE main character only — no companion, no sidekick, no friend. The child is the sole character.` : "";
     try {
-      const r = await api([{ role: "user", content: `Creative brief:\n${briefStr()}${fb ? `\n\nFEEDBACK:\n${fb}` : ""}${charNote}\n\nGenerate exactly 4 storyline concepts.\nONLY raw JSON array of 4 objects. Keys: ${jsonKeys}.` }], "concepts");
+      const r = await api([{ role: "user", content: `Creative brief:\n${briefStr()}${fb ? `\n\nFEEDBACK:\n${fb}` : ""}${charNote}\n\nGenerate exactly 4 storyline concepts.\nONLY raw JSON array of 4 objects. Keys: ${jsonKeys}.\nFor "key_moments": use bullet-point format with "- " prefix per line (e.g., "- Big splash in the puddle\\n- Discovers a frog").` }], "concepts");
       setConcepts(parseJSON(r)); mark("brief");
     } catch (e) { if (e.name !== "AbortError") setErr(e.message); }
     setLoading(false);
   };
 
   const pickConcept = async (concept) => {
-    setSelConcept(concept); setErr(null); setLoading(true); cancelledRef.current = false; go("characters"); mark("concepts");
+    // Strip companion/role keys if setup doesn't need them
+    const cleanConcept = { ...concept };
     const setup = brief.character_setup || "";
     const hasCompanion = setup.includes("companion");
     const hasTwoChildren = setup.includes("Two");
     const hasAdult = setup.includes("adult");
+    if (!hasCompanion && !hasTwoChildren && !hasAdult) {
+      delete cleanConcept.companion_role;
+      delete cleanConcept.second_character_role;
+    }
+    setSelConcept(cleanConcept); setErr(null); setLoading(true); cancelledRef.current = false; go("characters"); mark("concepts");
 
     const trait = brief.character_trait ? ` Personality trait: ${brief.character_trait} — this should come through in body language and emotional baseline.` : "";
     let charInstructions = `Child: describe 1-2 yrs YOUNGER than actual. Basic clothes. Include: height/build, skin tone, hair, eye color/shape, face details (nose, cheeks, lips, dimples/freckles), exact clothing with specific colors, body language, emotional baseline.${trait}`;
@@ -182,7 +188,7 @@ export default function App() {
       : "";
 
     try {
-      const r = await api([{ role: "user", content: `BRIEF:\n${briefStr()}\nCONCEPT:\n${JSON.stringify(concept)}\n${soloNote}\nCreate HIGHLY detailed character descriptions (pasted verbatim into every image prompt).\n\n${charInstructions}\n\nParagraph form, one block per character.` }], "characters");
+      const r = await api([{ role: "user", content: `BRIEF:\n${briefStr()}\nCONCEPT:\n${JSON.stringify(cleanConcept)}\n${soloNote}\nCreate HIGHLY detailed character descriptions (pasted verbatim into every image prompt).\n\n${charInstructions}\n\nParagraph form, one block per character.` }], "characters");
       setChars(r);
     } catch (e) { if (e.name !== "AbortError") setErr(e.message); }
     setLoading(false);
@@ -266,7 +272,7 @@ export default function App() {
         if (cancelledRef.current) break;
         const bo = outline.slice(b, b + 3), bt = text.slice(b, b + 3);
         const combined = bo.map((p, i) => ({ ...p, story_text: bt[i]?.text }));
-        const r = await api([{ role: "user", content: `CHARACTERS (verbatim every prompt):\n${chars}\nSTYLE: ${brief.illustration_style || "IMAX, ultra hyper film still, cinematic"}\n\nPrompts for:\n${JSON.stringify(combined)}\n\nEach: page#/style/ratio, ONE scene, full chars redescribed, spreads="one panoramic image" (NEVER left/right/center/seam), chars SMALL in wide scene, facial expressions, nothing in center.\nONLY raw JSON array of ${bo.length}: "page_number","format","prompt".` }], "prompts");
+        const r = await api([{ role: "user", content: `BRIEF:\n${briefStr()}\nCHARACTERS (verbatim every prompt):\n${chars}\nSTYLE: ${brief.illustration_style || "IMAX, ultra hyper film still, cinematic"}\n\nPrompts for:\n${JSON.stringify(combined)}\n\nEach: page#/style/ratio, ONE scene, full chars redescribed, spreads="one panoramic image" (NEVER left/right/center/seam), chars SMALL in wide scene, facial expressions, nothing in center.\nONLY raw JSON array of ${bo.length}: "page_number","format","prompt".` }], "prompts");
         if (cancelledRef.current) break; all.push(...parseJSON(r)); setPrompts([...all]);
       }
       setPromptsStale(false); setDirtyPages([]);
@@ -277,7 +283,19 @@ export default function App() {
   const editPrompt = async (i, inst) => {
     setErr(null); setLidx(i);
     try {
-      const r = await api([{ role: "user", content: `CHARACTERS:\n${chars}\n\nCurrent:\n${JSON.stringify(prompts[i])}\n\nChange: "${inst}"\nKeep all rules. ONLY raw JSON: page_number,format,prompt.` }], "prompts");
+      const combined = { ...outline[i], story_text: text[i]?.text };
+      const r = await api([{ role: "user", content: `BRIEF:\n${briefStr()}\nCHARACTERS (verbatim every prompt):\n${chars}\nSTYLE: ${brief.illustration_style || "IMAX, ultra hyper film still, cinematic"}\nSCENE+TEXT:\n${JSON.stringify(combined)}\n\nCurrent prompt:\n${JSON.stringify(prompts[i])}\n\nChange: "${inst}"\nEach: page#/style/ratio, ONE scene, full chars redescribed, spreads="one panoramic image" (NEVER left/right/center/seam), chars SMALL in wide scene, facial expressions, nothing in center.\nONLY raw JSON: page_number,format,prompt.` }], "prompts");
+      setPrompts(p => p.map((x, j) => j === i ? parseJSON(r) : x));
+      setDirtyPages(p => p.includes(i) ? p : [...p, i]);
+    } catch (e) { if (e.name !== "AbortError") setErr(e.message); }
+    setLidx(null);
+  };
+
+  const regenOnePrompt = async (i) => {
+    setErr(null); setLidx(i);
+    try {
+      const combined = { ...outline[i], story_text: text[i]?.text };
+      const r = await api([{ role: "user", content: `BRIEF:\n${briefStr()}\nCHARACTERS (verbatim every prompt):\n${chars}\nSTYLE: ${brief.illustration_style || "IMAX, ultra hyper film still, cinematic"}\n\nGenerate prompt for:\n${JSON.stringify(combined)}\n\nEach: page#/style/ratio, ONE scene, full chars redescribed, spreads="one panoramic image" (NEVER left/right/center/seam), chars SMALL in wide scene, facial expressions, nothing in center.\nONLY raw JSON: page_number,format,prompt.` }], "prompts");
       setPrompts(p => p.map((x, j) => j === i ? parseJSON(r) : x));
       setDirtyPages(p => p.includes(i) ? p : [...p, i]);
     } catch (e) { if (e.name !== "AbortError") setErr(e.message); }
@@ -301,10 +319,10 @@ export default function App() {
           text={text} onGenText={genText} onViewText={() => go("text")} />;
       case "text":
         return <TextCards text={text} outline={outline} loading={loading} lidx={lidx} onAI={aiEditText} onSave={manualText}
-          textStale={textStale} prompts={prompts} onGenPrompts={genPrompts} onViewPrompts={() => go("prompts")}
+          onSaveScene={manualOutline} textStale={textStale} prompts={prompts} onGenPrompts={genPrompts} onViewPrompts={() => go("prompts")}
           onRegenText={genText} charNames={charNames} />;
       case "prompts":
-        return <PromptCards prompts={prompts} loading={loading} lidx={lidx} onAI={editPrompt}
+        return <PromptCards prompts={prompts} loading={loading} lidx={lidx} onAI={editPrompt} onRegenOne={regenOnePrompt}
           promptsStale={promptsStale} onGenPrompts={genPrompts}
           onGoImages={() => { mark("prompts"); go("images"); }}
           bannedWords={rules.bannedWords} chars={chars} />;
@@ -331,12 +349,9 @@ export default function App() {
       <SessionsModal open={sessionsOpen} onClose={() => setSessionsOpen(false)} getState={getState} loadState={loadStateData} />
       <div style={{ maxWidth: 800, margin: "0 auto", padding: "36px 24px 80px" }}>
         <div style={{ marginBottom: 28, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-            <KaguLogo size={44} />
-            <div>
-              <h1 style={{ fontSize: 28, fontWeight: 700, margin: 0, fontFamily: "var(--font-playfair), 'Playfair Display', serif" }}>Kagu Kids</h1>
-              <p style={{ fontSize: 12, color: T.textDim, margin: "2px 0 0", letterSpacing: .5 }}>Book Builder</p>
-            </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <KaguLogo size={72} />
+            <p style={{ fontSize: 13, color: T.textDim, margin: 0, letterSpacing: .5 }}>Book Builder</p>
           </div>
           <div style={{ display: "flex", gap: 6 }}>
             <button onClick={() => setSessionsOpen(true)} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 8, padding: "8px 14px", fontSize: 13, cursor: "pointer", color: T.textDim, fontFamily: "inherit" }}

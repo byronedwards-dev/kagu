@@ -91,14 +91,14 @@ export default function CharEditor({ content, loading, onManual, onAI, onNext, n
             <Txt
               value={block.text}
               onChange={v => updateBlock(i, v)}
-              rows={Math.max(4, block.text.split("\n").length + 1)}
+              rows={Math.max(8, block.text.split("\n").length + 2)}
               style={{ fontSize: 14, lineHeight: 1.7 }}
             />
           </div>
         ))}
       </div>
     ) : (
-      <Txt value={content} onChange={onManual} rows={14} style={{ fontSize: 14, lineHeight: 1.7, minHeight: 220 }} />
+      <Txt value={content} onChange={onManual} rows={18} style={{ fontSize: 14, lineHeight: 1.7, minHeight: 300 }} />
     )}
 
     <AIBar onSubmit={onAI} placeholder="e.g., Add freckles, make puppy fluffier..." />

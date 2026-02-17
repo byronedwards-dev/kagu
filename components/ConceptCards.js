@@ -30,10 +30,14 @@ export default function ConceptCards({ concepts, loading, onSelect, onRegen, cha
           <Field label="Structure"><Sel value={ed.structure} onChange={v => u("structure", v)} options={["arc", "pattern", "hybrid"]} /></Field>
           {hasSecondChar && <Field label={roleLabel}><Inp value={ed[roleKey]} onChange={v => u(roleKey, v)} /></Field>}
         </div>
-        <Field label="Key Visuals"><Txt value={ed.key_moments} onChange={v => u("key_moments", v)} rows={2} /></Field>
+        <Field label="Key Visuals"><Txt value={ed.key_moments} onChange={v => u("key_moments", v)} rows={5} style={{ fontSize: 14, lineHeight: 1.6 }} /></Field>
       </div>
       <div style={{ marginTop: 16, display: "flex", gap: 8 }}>
-        <Btn onClick={() => onSelect(ed)}>Continue to Characters →</Btn>
+        <Btn onClick={() => {
+          const out = { ...ed };
+          if (!hasSecondChar) { delete out.companion_role; delete out.second_character_role; }
+          onSelect(out);
+        }}>Continue to Characters →</Btn>
         <Btn ghost onClick={() => { setSel(null); setEd(null); }}>← Back</Btn>
       </div>
     </div>;
@@ -48,7 +52,8 @@ export default function ConceptCards({ concepts, loading, onSelect, onRegen, cha
         onMouseLeave={e => { e.currentTarget.style.borderColor = T.border; e.currentTarget.style.background = T.card; }}>
         <h3 style={{ fontSize: 16, fontWeight: 700, color: T.text, margin: "0 0 6px" }}>{c.title}</h3>
         <div style={{ marginBottom: 8 }}><Pill>{(c.structure || "").slice(0, 30)}</Pill></div>
-        <p style={{ fontSize: 14, color: T.textSoft, lineHeight: 1.6, margin: 0 }}>{c.premise}</p>
+        <p style={{ fontSize: 14, color: T.textSoft, lineHeight: 1.6, margin: "0 0 8px" }}>{c.premise}</p>
+        {c.key_moments && <div style={{ fontSize: 12, color: T.textDim, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{c.key_moments}</div>}
       </div>)}
     </div>
     <div style={{ marginTop: 12, display: "flex", gap: 12 }}>
