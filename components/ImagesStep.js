@@ -193,12 +193,52 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
   const pct = progress ? Math.round(progress.completed / progress.total * 100) : 0;
 
   return <div>
-    <h2 style={{ fontSize: 22, fontWeight: 700, color: T.text, margin: "0 0 6px" }}>Image Generation</h2>
-    <p style={{ fontSize: 14, color: T.textSoft, margin: "0 0 16px" }}>
-      {totalImages} image{totalImages !== 1 ? "s" : ""} generated
-      {dirtyPages?.length > 0 && ` · ${dirtyPages.length} page${dirtyPages.length !== 1 ? "s" : ""} need re-generation`}
-      {hasN8n ? " · n8n connected" : " · n8n not configured"}
-    </p>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
+      <div>
+        <h2 style={{ fontSize: 22, fontWeight: 700, color: T.text, margin: "0 0 6px" }}>Image Generation</h2>
+        <p style={{ fontSize: 14, color: T.textSoft, margin: 0 }}>
+          {totalImages} image{totalImages !== 1 ? "s" : ""} generated
+          {dirtyPages?.length > 0 && ` · ${dirtyPages.length} page${dirtyPages.length !== 1 ? "s" : ""} need re-generation`}
+          {hasN8n ? " · n8n connected" : " · n8n not configured"}
+        </p>
+      </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", flexShrink: 0 }}>
+        <Btn onClick={genAll} disabled={pending || !hasN8n} small>
+          ⚡ Generate All Pages
+        </Btn>
+        {dirtyPages?.length > 0 && (
+          <Btn onClick={genDirty} disabled={pending || !hasN8n} small ghost>
+            ⚡ Dirty Only ({dirtyPages.length})
+          </Btn>
+        )}
+        {pending && <Btn ghost small danger onClick={stopGen}>■ Stop</Btn>}
+      </div>
+    </div>
+
+    {!hasN8n && <div style={{ marginBottom: 12, fontSize: 12, color: T.amber, fontWeight: 600 }}>
+      Set your n8n webhook URL in Settings → Connections to enable image generation.
+    </div>}
+
+    {/* Progress bar */}
+    {pending && progress && <div style={{ marginBottom: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: T.textSoft, marginBottom: 4 }}>
+        <span>
+          {progress.completed === 0
+            ? `Sending ${progress.total} page${progress.total !== 1 ? "s" : ""} to n8n...`
+            : `${progress.completed} of ${progress.total} pages complete`}
+        </span>
+        <span>{pct}%</span>
+      </div>
+      <div style={{ height: 4, background: T.border, borderRadius: 2 }}>
+        <div style={{
+          height: 4, borderRadius: 2,
+          background: progress.completed === 0 ? T.amber : T.accent,
+          width: progress.completed === 0 ? "100%" : `${pct}%`,
+          transition: "width .3s",
+          animation: progress.completed === 0 ? "sp .7s linear infinite" : "none",
+        }} />
+      </div>
+    </div>}
 
     {/* Model selector */}
     <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 12, padding: 16, marginBottom: 16 }}>
@@ -216,40 +256,6 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
           </button>
         ))}
       </div>
-      <div style={{ marginTop: 12, display: "flex", gap: 8, flexWrap: "wrap" }}>
-        <Btn onClick={genAll} disabled={pending || !hasN8n} small>
-          ⚡ Generate All Pages
-        </Btn>
-        {dirtyPages?.length > 0 && (
-          <Btn onClick={genDirty} disabled={pending || !hasN8n} small ghost>
-            ⚡ Dirty Only ({dirtyPages.length})
-          </Btn>
-        )}
-        {pending && <Btn ghost small danger onClick={stopGen}>■ Stop</Btn>}
-      </div>
-      {!hasN8n && <div style={{ marginTop: 8, fontSize: 12, color: T.amber, fontWeight: 600 }}>
-        Set your n8n webhook URL in Settings → Connections to enable image generation.
-      </div>}
-      {/* Progress bar */}
-      {pending && progress && <div style={{ marginTop: 10 }}>
-        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: T.textSoft, marginBottom: 4 }}>
-          <span>
-            {progress.completed === 0
-              ? `Sending ${progress.total} page${progress.total !== 1 ? "s" : ""} to n8n...`
-              : `${progress.completed} of ${progress.total} pages complete`}
-          </span>
-          <span>{pct}%</span>
-        </div>
-        <div style={{ height: 4, background: T.border, borderRadius: 2 }}>
-          <div style={{
-            height: 4, borderRadius: 2,
-            background: progress.completed === 0 ? T.amber : T.accent,
-            width: progress.completed === 0 ? "100%" : `${pct}%`,
-            transition: "width .3s",
-            animation: progress.completed === 0 ? "sp .7s linear infinite" : "none",
-          }} />
-        </div>
-      </div>}
     </div>
 
     {genErr && <ErrBox msg={genErr} onDismiss={() => setGenErr(null)} />}
