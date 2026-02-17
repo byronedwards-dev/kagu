@@ -20,7 +20,7 @@ function OCard({ page, idx, lidx, onAI, onSave }) {
       <Txt value={lc} onChange={setLc} rows={3} style={{ fontSize: 13 }} />
       <div style={{ display: "flex", gap: 6, marginTop: 6 }}><Btn small onClick={() => { onSave(idx, lc); setEd(false); }}>Save</Btn><Btn ghost small onClick={() => { setEd(false); setLc(page.description || ""); }}>Cancel</Btn></div>
     </div> : <p style={{ fontSize: 14, color: T.text, lineHeight: 1.65, margin: 0, cursor: "pointer", whiteSpace: "pre-wrap" }} onClick={() => setEd(true)} title="Click to edit">{page.description || "—"}</p>}
-    {page.setting && <p style={{ fontSize: 12, color: T.textSoft, margin: "8px 0 0" }}>📍 {page.setting}{page.next_setting ? ` → ${page.next_setting}` : ""}</p>}
+    {page.setting && <p style={{ fontSize: 12, color: T.textSoft, margin: "8px 0 0" }}>📍 {page.setting}</p>}
     {!ed && <AIBar onSubmit={i => onAI(idx, i)} />}
   </div>;
 }
@@ -38,7 +38,7 @@ export default function OutlineCards({ outline, loading, lidx, onAI, onSave, onR
           ? <Btn small onClick={onViewText}>View Text →</Btn>
           : <Btn small onClick={onGenText}>Generate Text →</Btn>
         }
-        <Btn small ghost onClick={onRegenOutline}>↻ Regen Scenes</Btn>
+        <Btn small ghost onClick={onRegenOutline}>↻ Regen Outline</Btn>
       </div>}
     </div>
     <div style={{ display: "grid", gap: 6 }}>
