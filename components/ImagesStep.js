@@ -9,7 +9,7 @@ import PageHdr from "./ui/PageHdr";
 import ErrBox from "./ui/ErrBox";
 
 export default function ImagesStep({ prompts, images, setImages, outline, dirtyPages, settings }) {
-  const [selectedModel, setSelectedModel] = useState(settings?.defaultModel || "flux-2-pro");
+  const [selectedModels, setSelectedModels] = useState(new Set([settings?.defaultModel || "flux-2-pro"]));
   const [genErr, setGenErr] = useState(null);
   const [copied, setCopied] = useState(null);
   const [pending, setPending] = useState(false);
@@ -19,29 +19,56 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
   const [lightbox, setLightbox] = useState(null); // { url, pageIdx, imgIdx }
   const pollRef = useRef(null);
 
+  const toggleModel = (id) => {
+    setSelectedModels(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        if (next.size > 1) next.delete(id); // keep at least one selected
+      } else {
+        next.add(id);
+      }
+      return next;
+    });
+  };
+
   const copyPrompt = (idx) => {
     navigator.clipboard.writeText(prompts[idx]?.prompt || "");
     setCopied(idx);
     setTimeout(() => setCopied(null), 2000);
   };
 
-  // Build pages payload for n8n
+  // Build pages payload for n8n — one entry per page per model
   const buildPagesPayload = (pageIndices) => {
-    return pageIndices.map(idx => ({
+    const base = pageIndices.map(idx => ({
       page_index: idx,
       page_name: outline?.[idx]?.title_short || `Page ${idx + 1}`,
       format: imgFmt(idx),
       aspect_ratio: imgFmt(idx) === "spread" ? "1:2" : "1:1",
       image_prompt: prompts[idx]?.prompt || "",
     })).filter(p => p.image_prompt);
+
+    // Duplicate each page for each selected model
+    const models = [...selectedModels];
+    if (models.length <= 1) {
+      // Single model — add image_model to each page
+      return base.map(p => ({ ...p, image_model: models[0] }));
+    }
+    // Multi-model — duplicate pages
+    const pages = [];
+    for (const page of base) {
+      for (const model of models) {
+        pages.push({ ...page, image_model: model });
+      }
+    }
+    return pages;
   };
 
   // Poll for results from n8n-results endpoint
-  const startPolling = useCallback((jid, pageIndices) => {
+  const startPolling = useCallback((jid, expectedTotal) => {
     if (pollRef.current) clearInterval(pollRef.current);
 
     const pollStartTime = Date.now();
-    const POLL_TIMEOUT = 5 * 60 * 1000; // 5 minute timeout
+    const POLL_TIMEOUT = 10 * 60 * 1000; // 10 minute timeout for multi-model
 
     const stopPoll = (errMsg) => {
       clearInterval(pollRef.current);
@@ -54,9 +81,9 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
     };
 
     pollRef.current = setInterval(async () => {
-      // Timeout check — if polling longer than 5 minutes, give up
+      // Timeout check
       if (Date.now() - pollStartTime > POLL_TIMEOUT) {
-        stopPoll("Generation timed out after 5 minutes. Check your n8n workflow for errors.");
+        stopPoll("Generation timed out after 10 minutes. Check your n8n workflow for errors.");
         return;
       }
 
@@ -71,7 +98,7 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
         }
 
         // Update progress
-        setProgress({ completed: data.completedPages || 0, total: data.totalPages || pageIndices.length });
+        setProgress({ completed: data.completedPages || 0, total: data.totalPages || expectedTotal });
 
         // Apply any completed images incrementally
         if (data.results && Object.keys(data.results).length > 0) {
@@ -83,7 +110,7 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
               for (const v of (result.variants || [])) {
                 if (!existingUrls.includes(v.url)) {
                   if (!next[idx]) next[idx] = [];
-                  next[idx] = [...next[idx], { url: v.url, model: v.model || selectedModel, ts: Date.now(), selected: false }];
+                  next[idx] = [...next[idx], { url: v.url, model: v.model || "unknown", ts: Date.now(), selected: false }];
                 }
               }
             }
@@ -102,7 +129,7 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
         console.warn("Poll error:", e.message);
       }
     }, 3000); // Poll every 3 seconds
-  }, [selectedModel, setImages]);
+  }, [setImages]);
 
   // Clean up polling on unmount
   useEffect(() => {
@@ -115,21 +142,28 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
       setGenErr("n8n webhook URL not configured. Go to Settings → Connections to set it up.");
       return;
     }
+    if (selectedModels.size === 0) {
+      setGenErr("Select at least one model.");
+      return;
+    }
+
+    const pages = buildPagesPayload(pageIndices);
+    const totalExpected = pages.length; // pages × models
 
     setGenErr(null);
     setPending(true);
     setPendingPages(pageIndices);
-    setProgress({ completed: 0, total: pageIndices.length });
+    setProgress({ completed: 0, total: totalExpected });
 
     try {
       const res = await fetch("/api/n8n-send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          mode: pageIndices.length === 1 ? "single" : "batch",
+          mode: pages.length === 1 ? "single" : "batch",
           webhook_url: settings.n8nWebhookUrl,
-          book: { image_model: selectedModel },
-          pages: buildPagesPayload(pageIndices),
+          book: { image_models: [...selectedModels] },
+          pages,
         }),
       });
 
@@ -137,9 +171,9 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
       if (data.error) throw new Error(data.error);
 
       // Got job_id — start polling
-      console.log(`[generate] Got job_id=${data.job_id}, starting poll...`);
+      console.log(`[generate] Got job_id=${data.job_id}, ${totalExpected} items (${pageIndices.length} pages × ${selectedModels.size} models)`);
       setJobId(data.job_id);
-      startPolling(data.job_id, pageIndices);
+      startPolling(data.job_id, totalExpected);
     } catch (e) {
       setGenErr(e.message);
       setPending(false);
@@ -191,6 +225,8 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
   const totalImages = Object.values(images).reduce((s, a) => s + a.length, 0);
   const hasN8n = !!settings?.n8nWebhookUrl;
   const pct = progress ? Math.round(progress.completed / progress.total * 100) : 0;
+  const modelCount = selectedModels.size;
+  const modelLabel = modelCount === 1 ? [...selectedModels][0] : `${modelCount} models`;
 
   return <div>
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
@@ -224,8 +260,8 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
       <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: T.textSoft, marginBottom: 4 }}>
         <span>
           {progress.completed === 0
-            ? `Sending ${progress.total} page${progress.total !== 1 ? "s" : ""} to n8n...`
-            : `${progress.completed} of ${progress.total} pages complete`}
+            ? `Sending ${progress.total} item${progress.total !== 1 ? "s" : ""} to n8n (${modelLabel})...`
+            : `${progress.completed} of ${progress.total} complete (${modelLabel})`}
         </span>
         <span>{pct}%</span>
       </div>
@@ -240,21 +276,29 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
       </div>
     </div>}
 
-    {/* Model selector */}
+    {/* Model selector — multi-select */}
     <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 12, padding: 16, marginBottom: 16 }}>
-      <div style={{ fontSize: 12, fontWeight: 700, color: T.textSoft, marginBottom: 10, textTransform: "uppercase", letterSpacing: .5 }}>Model</div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: T.textSoft, textTransform: "uppercase", letterSpacing: .5 }}>Models</div>
+        <span style={{ fontSize: 11, color: T.textDim }}>{modelCount} selected · click to toggle</span>
+      </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 8 }}>
-        {IMAGE_MODELS.map(m => (
-          <button key={m.id} onClick={() => setSelectedModel(m.id)} style={{
-            background: selectedModel === m.id ? T.accentBg : "transparent",
-            border: `1px solid ${selectedModel === m.id ? T.accent : T.border}`,
+        {IMAGE_MODELS.map(m => {
+          const active = selectedModels.has(m.id);
+          return <button key={m.id} onClick={() => toggleModel(m.id)} style={{
+            background: active ? T.accentBg : "transparent",
+            border: `1px solid ${active ? T.accent : T.border}`,
             borderRadius: 10, padding: "10px 12px", textAlign: "left", cursor: "pointer", transition: "all .15s",
+            position: "relative",
           }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: selectedModel === m.id ? T.accent : T.text }}>{m.name}</div>
+            {active && <div style={{
+              position: "absolute", top: 6, right: 8, fontSize: 10, color: T.accent, fontWeight: 700,
+            }}>✓</div>}
+            <div style={{ fontSize: 13, fontWeight: 700, color: active ? T.accent : T.text }}>{m.name}</div>
             <div style={{ fontSize: 11, color: T.textDim, marginTop: 2 }}>{m.provider} · {m.cost}</div>
             <div style={{ fontSize: 11, color: T.textSoft, marginTop: 2 }}>{m.best_for}</div>
-          </button>
-        ))}
+          </button>;
+        })}
       </div>
     </div>
 
@@ -301,7 +345,7 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
             <p style={{ fontSize: 12, color: T.textSoft, lineHeight: 1.5, margin: "6px 0 0", whiteSpace: "pre-wrap" }}>{p.prompt || "—"}</p>
           </details>
 
-          {isPagePending && !isPageDone && <Loader text={`Generating via n8n (${selectedModel})`} />}
+          {isPagePending && !isPageDone && <Loader text={`Generating via n8n (${modelLabel})`} />}
 
           {/* Image gallery */}
           {pageImages.length > 0 && (
