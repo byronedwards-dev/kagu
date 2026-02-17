@@ -142,8 +142,16 @@ export default function App() {
 
   const genConcepts = async (fb = "") => {
     setErr(null); setLoading(true); cancelledRef.current = false; go("concepts");
+    const hasCompanion = brief.character_setup?.includes("companion");
+    const hasSecondChar = brief.character_setup?.includes("Two") || brief.character_setup?.includes("adult") || hasCompanion;
+    const jsonKeys = hasCompanion
+      ? `"title", "premise", "structure" (ONLY "arc"/"pattern"/"hybrid"), "companion_role", "key_moments"`
+      : hasSecondChar
+        ? `"title", "premise", "structure" (ONLY "arc"/"pattern"/"hybrid"), "second_character_role", "key_moments"`
+        : `"title", "premise", "structure" (ONLY "arc"/"pattern"/"hybrid"), "key_moments"`;
+    const charNote = !hasSecondChar ? `\nIMPORTANT: The story has ONE main character only — no companion, no sidekick, no friend. The child is the sole character.` : "";
     try {
-      const r = await api([{ role: "user", content: `Creative brief:\n${briefStr()}${fb ? `\n\nFEEDBACK:\n${fb}` : ""}\n\nGenerate exactly 4 storyline concepts.\nONLY raw JSON array of 4 objects. Keys: "title", "premise", "structure" (ONLY "arc"/"pattern"/"hybrid"), "companion_role", "key_moments".` }], "concepts");
+      const r = await api([{ role: "user", content: `Creative brief:\n${briefStr()}${fb ? `\n\nFEEDBACK:\n${fb}` : ""}${charNote}\n\nGenerate exactly 4 storyline concepts.\nONLY raw JSON array of 4 objects. Keys: ${jsonKeys}.` }], "concepts");
       setConcepts(parseJSON(r)); mark("brief");
     } catch (e) { if (e.name !== "AbortError") setErr(e.message); }
     setLoading(false);
@@ -151,8 +159,30 @@ export default function App() {
 
   const pickConcept = async (concept) => {
     setSelConcept(concept); setErr(null); setLoading(true); cancelledRef.current = false; go("characters"); mark("concepts");
+    const setup = brief.character_setup || "";
+    const hasCompanion = setup.includes("companion");
+    const hasTwoChildren = setup.includes("Two");
+    const hasAdult = setup.includes("adult");
+
+    const trait = brief.character_trait ? ` Personality trait: ${brief.character_trait} — this should come through in body language and emotional baseline.` : "";
+    let charInstructions = `Child: describe 1-2 yrs YOUNGER than actual. Basic clothes. Include: height/build, skin tone, hair, eye color/shape, face details (nose, cheeks, lips, dimples/freckles), exact clothing with specific colors, body language, emotional baseline.${trait}`;
+
+    if (hasCompanion) {
+      const details = brief.sidekick_details ? ` Use these specifics: ${brief.sidekick_details}.` : "";
+      charInstructions += `\n\nCompanion: exact breed+age+weight, fur details, max 2 accessories with exact placement, size relative to child.${details}`;
+    } else if (hasTwoChildren) {
+      charInstructions += `\n\nSecond child: same level of detail as the first — height/build, skin tone, hair, eye color/shape, face details, clothing, body language, emotional baseline. Describe 1-2 yrs YOUNGER than actual.`;
+    } else if (hasAdult) {
+      charInstructions += `\n\nAdult (coach/parent/mentor): height/build, skin tone, hair, face details, clothing with specific colors, body language, relationship to child.`;
+    }
+    // "One main character" — no additional character instructions
+
+    const soloNote = !hasCompanion && !hasTwoChildren && !hasAdult
+      ? `\nIMPORTANT: This story has ONE main character only. Do NOT create any companion, sidekick, friend, or secondary character. The child is the sole character.\n`
+      : "";
+
     try {
-      const r = await api([{ role: "user", content: `BRIEF:\n${briefStr()}\nCONCEPT:\n${JSON.stringify(concept)}\n\nCreate HIGHLY detailed character descriptions (pasted verbatim into every image prompt).\n\nChild: describe 1-2 yrs YOUNGER than actual. Basic clothes. Include: height/build, skin tone, hair, eye color/shape, face details (nose, cheeks, lips, dimples/freckles), exact clothing with specific colors, body language, emotional baseline.\n\nCompanion: exact breed+age+weight, fur details, max 2 accessories with exact placement, size relative to child.\n\nParagraph form, one block per character.` }], "characters");
+      const r = await api([{ role: "user", content: `BRIEF:\n${briefStr()}\nCONCEPT:\n${JSON.stringify(concept)}\n${soloNote}\nCreate HIGHLY detailed character descriptions (pasted verbatim into every image prompt).\n\n${charInstructions}\n\nParagraph form, one block per character.` }], "characters");
       setChars(r);
     } catch (e) { if (e.name !== "AbortError") setErr(e.message); }
     setLoading(false);
@@ -170,10 +200,12 @@ export default function App() {
   const genOutline = async () => {
     setErr(null); setLoading(true); cancelledRef.current = false; go("outline"); mark("characters");
     const all = [];
+    const density = brief.text_density || "";
+    const densityNote = density ? `\nText density: ${density}. Adjust number of image-only pages accordingly.` : "";
     try {
-      const r1 = await api([{ role: "user", content: `BRIEF:\n${briefStr()}\nCONCEPT:\n${JSON.stringify(selConcept)}\nCHARACTERS:\n${chars}\n\nOutline for images 1-11 of 22:\n- 1: Cover (square)\n- 2: Inside left (square)\n- 3: Inside right (square)\n- 4-11: Spreads 1-8 (1:2)\n\nEach = ONE drawable scene. Include setting transitions. Mark 2-3 image-only.\nONLY raw JSON array of 11 objects: "page_number","format","title_short","setting","description","next_setting","image_only".` }], "outline");
+      const r1 = await api([{ role: "user", content: `BRIEF:\n${briefStr()}\nCONCEPT:\n${JSON.stringify(selConcept)}\nCHARACTERS:\n${chars}\n\nOutline for images 1-11 of 22:\n- 1: Cover (square)\n- 2: Inside left (square)\n- 3: Inside right (square)\n- 4-11: Spreads 1-8 (1:2)\n\nEach = ONE drawable scene. Include setting transitions. Mark image-only pages based on density.${densityNote}\nONLY raw JSON array of 11 objects: "page_number","format","title_short","setting","description","next_setting","image_only".` }], "outline");
       if (cancelledRef.current) return; all.push(...parseJSON(r1)); setOutline([...all]);
-      const r2 = await api([{ role: "user", content: `First 11:\n${JSON.stringify(all)}\n\nNow images 12-22:\n- 12-20: Spreads 9-17 (1:2)\n- 21: Closing page (square) — this IS part of the story, emotional resolution\n- 22: Back cover (square) — warm closing image\n\n2-3 more image-only. Story resolves by 20-21.\nONLY raw JSON array of 11 objects. Same keys.` }], "outline");
+      const r2 = await api([{ role: "user", content: `First 11:\n${JSON.stringify(all)}\n\nNow images 12-22:\n- 12-20: Spreads 9-17 (1:2)\n- 21: Closing page (square) — this IS part of the story, emotional resolution\n- 22: Back cover (square) — warm closing image\n\nMore image-only pages as needed for the text density setting. Story resolves by 20-21.${densityNote}\nONLY raw JSON array of 11 objects. Same keys.` }], "outline");
       if (cancelledRef.current) return; all.push(...parseJSON(r2)); setOutline([...all]);
       setTextStale(false); setPromptsStale(false);
     } catch (e) { if (e.name !== "AbortError") setErr(e.message); }
@@ -260,7 +292,7 @@ export default function App() {
       case "brief":
         return <BriefForm brief={brief} set={setBrief} onSubmit={() => genConcepts("")} loading={loading} />;
       case "concepts":
-        return <ConceptCards concepts={concepts} loading={loading} onSelect={pickConcept} onRegen={genConcepts} />;
+        return <ConceptCards concepts={concepts} loading={loading} onSelect={pickConcept} onRegen={genConcepts} characterSetup={brief.character_setup} />;
       case "characters":
         return <CharEditor content={chars} loading={loading} onManual={setChars} onAI={aiEditChars}
           onNext={outline.length ? () => go("outline") : genOutline} nextLabel={outline.length ? "View Outline →" : "Generate Outline →"} />;

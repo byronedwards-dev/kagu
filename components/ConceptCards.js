@@ -9,22 +9,26 @@ import Txt from "./ui/Txt";
 import Sel from "./ui/Sel";
 import Loader from "./ui/Loader";
 
-export default function ConceptCards({ concepts, loading, onSelect, onRegen }) {
+export default function ConceptCards({ concepts, loading, onSelect, onRegen, characterSetup }) {
   const [sel, setSel] = useState(null);
   const [ed, setEd] = useState(null);
+  const hasCompanion = characterSetup?.includes("companion");
+  const hasSecondChar = characterSetup?.includes("Two") || characterSetup?.includes("adult") || hasCompanion;
 
   if (loading) return <Loader text="Brainstorming 4 concepts" />;
 
   if (sel !== null) {
     const u = (k, v) => setEd(p => ({ ...p, [k]: v }));
+    const roleKey = hasCompanion ? "companion_role" : "second_character_role";
+    const roleLabel = hasCompanion ? "Companion Role" : "Second Character Role";
     return <div>
       <h2 style={{ fontSize: 22, fontWeight: 700, color: T.text, margin: "0 0 16px" }}>Refine Concept</h2>
       <div style={{ background: T.card, border: `1px solid ${T.accent}`, borderRadius: 12, padding: 20, display: "grid", gap: 14 }}>
         <Field label="Title"><Inp value={ed.title} onChange={v => u("title", v)} /></Field>
         <Field label="Premise"><Txt value={ed.premise} onChange={v => u("premise", v)} rows={3} /></Field>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: hasSecondChar ? "1fr 1fr" : "1fr", gap: 12 }}>
           <Field label="Structure"><Sel value={ed.structure} onChange={v => u("structure", v)} options={["arc", "pattern", "hybrid"]} /></Field>
-          <Field label="Companion Role"><Inp value={ed.companion_role} onChange={v => u("companion_role", v)} /></Field>
+          {hasSecondChar && <Field label={roleLabel}><Inp value={ed[roleKey]} onChange={v => u(roleKey, v)} /></Field>}
         </div>
         <Field label="Key Visuals"><Txt value={ed.key_moments} onChange={v => u("key_moments", v)} rows={2} /></Field>
       </div>

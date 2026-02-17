@@ -28,17 +28,21 @@ function OCard({ page, idx, lidx, onAI, onSave }) {
 export default function OutlineCards({ outline, loading, lidx, onAI, onSave, text, onGenText, onViewText }) {
   if (loading && !outline.length) return <><h2 style={{ fontSize: 22, fontWeight: 700, color: T.text }}>Page Outline</h2><Loader text="Building outline (batch 1/2)" /></>;
   return <div>
-    <h2 style={{ fontSize: 22, fontWeight: 700, color: T.text, margin: "0 0 6px" }}>Page Outline</h2>
-    <p style={{ fontSize: 14, color: T.textSoft, margin: "0 0 16px" }}>22 images · Click text to edit · AI edit below each card</p>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
+      <div>
+        <h2 style={{ fontSize: 22, fontWeight: 700, color: T.text, margin: "0 0 6px" }}>Page Outline</h2>
+        <p style={{ fontSize: 14, color: T.textSoft, margin: 0 }}>22 images · Click text to edit · AI edit below each card</p>
+      </div>
+      {!loading && outline.length > 0 && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", flexShrink: 0 }}>
+        {text.length > 0
+          ? <><Btn small onClick={onViewText}>View Text →</Btn><Btn small ghost onClick={onGenText}>↻ Regen Text</Btn></>
+          : <Btn small onClick={onGenText}>Generate Text →</Btn>
+        }
+      </div>}
+    </div>
     <div style={{ display: "grid", gap: 6 }}>
       {outline.map((p, i) => <OCard key={i} page={p} idx={i} lidx={lidx} onAI={onAI} onSave={onSave} />)}
     </div>
     {loading && <Loader text="Generating batch 2/2" />}
-    {!loading && outline.length > 0 && <div style={{ marginTop: 16, display: "flex", gap: 8, flexWrap: "wrap" }}>
-      {text.length > 0
-        ? <><Btn onClick={onViewText}>View Story Text →</Btn><Btn ghost onClick={onGenText}>↻ Regenerate Text</Btn></>
-        : <Btn onClick={onGenText}>Generate Story Text →</Btn>
-      }
-    </div>}
   </div>;
 }
