@@ -25,7 +25,6 @@ export async function POST(request) {
     formData.append("prompt", body.prompt);
     formData.append("style", body.style || "realistic");
     formData.append("aspect_ratio", body.aspect_ratio || "1:1");
-    formData.append("variation", String(body.variation || 1));
     if (body.seed != null) formData.append("seed", String(body.seed));
 
     const res = await fetch("https://api.vyro.ai/v2/image/generations", {
