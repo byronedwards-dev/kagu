@@ -63,6 +63,7 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
       try {
         const res = await fetch(`/api/n8n-results?job_id=${jid}`);
         const data = await res.json();
+        console.log(`[poll] job=${jid} status=${data.status} completed=${data.completedPages} total=${data.totalPages} resultKeys=${Object.keys(data.results || {})} error=${data.error || "none"}`);
 
         if (data.error && res.status === 404) {
           stopPoll("Job not found — it may have expired. Try generating again.");
@@ -136,6 +137,7 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
       if (data.error) throw new Error(data.error);
 
       // Got job_id — start polling
+      console.log(`[generate] Got job_id=${data.job_id}, starting poll...`);
       setJobId(data.job_id);
       startPolling(data.job_id, pageIndices);
     } catch (e) {
