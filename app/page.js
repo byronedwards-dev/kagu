@@ -76,12 +76,14 @@ export default function App() {
     return Object.entries(b).filter(([k, v]) => v?.trim() && !k.endsWith("_other")).map(([k, v]) => `${k}: ${v}`).join("\n");
   };
 
+  const hasCompanion = brief.character_setup?.includes("companion") || false;
+
   const api = useCallback((msgs, stepName) => {
     const c = new AbortController();
     abortRef.current = c;
-    const sysPrompt = assembleSystemPrompt(rules, stepName || step);
+    const sysPrompt = assembleSystemPrompt(rules, stepName || step, { hasCompanion });
     return callClaude(msgs, sysPrompt, c.signal);
-  }, [rules, step]);
+  }, [rules, step, hasCompanion]);
 
   const stopGen = () => { cancelledRef.current = true; if (abortRef.current) abortRef.current.abort(); setLoading(false); };
 
