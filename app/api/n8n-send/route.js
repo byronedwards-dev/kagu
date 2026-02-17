@@ -1,14 +1,20 @@
 // POST /api/n8n-send
-// Proxies image generation requests to n8n webhook
-// Body matches PRD section 6.1: { mode, state_id?, label?, book, characters?, pages, dirty_pages?, fork_source? }
+// Fire-and-forget: sends pages to n8n webhook, returns immediately with a job_id.
+// n8n responds immediately (webhook set to "Immediately"), processes images async,
+// then POSTs results back to /api/n8n-callback when done.
+
+import { randomUUID } from "crypto";
+
+// In-memory job store (shared with n8n-callback and n8n-results routes)
+// In production, replace with Redis/DB if you need persistence across deploys
+if (!globalThis.__n8nJobs) globalThis.__n8nJobs = {};
 
 export async function POST(request) {
-  // Try env var first, fall back to body-provided URL
   const envUrl = process.env.N8N_WEBHOOK_URL || process.env.NEXT_PUBLIC_N8N_WEBHOOK_URL;
 
   try {
     const body = await request.json();
-    const webhookUrl = envUrl || body.webhook_url;
+    const webhookUrl = body.webhook_url || envUrl;
 
     if (!webhookUrl) {
       return Response.json(
@@ -17,31 +23,45 @@ export async function POST(request) {
       );
     }
 
-    const res = await fetch(webhookUrl, {
+    // Generate a unique job ID
+    const jobId = randomUUID();
+    const pageIndices = (body.pages || []).map(p => p.page_index);
+
+    // Store job in memory
+    globalThis.__n8nJobs[jobId] = {
+      status: "processing",
+      created: Date.now(),
+      totalPages: pageIndices.length,
+      completedPages: 0,
+      results: {},
+    };
+
+    // Determine the callback URL for n8n to POST results back to
+    const host = request.headers.get("host") || "localhost:3000";
+    const proto = request.headers.get("x-forwarded-proto") || "https";
+    const callbackUrl = `${proto}://${host}/api/n8n-callback?job_id=${jobId}`;
+
+    // Fire and forget — don't await
+    fetch(webhookUrl, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
+        job_id: jobId,
+        callback_url: callbackUrl,
         mode: body.mode || "single",
-        state_id: body.state_id,
-        label: body.label,
         book: body.book || {},
-        characters: body.characters || {},
         pages: body.pages || [],
-        dirty_pages: body.dirty_pages || [],
-        fork_source: body.fork_source || null,
       }),
+    }).catch(err => {
+      // Mark job as failed if webhook send fails
+      if (globalThis.__n8nJobs[jobId]) {
+        globalThis.__n8nJobs[jobId].status = "error";
+        globalThis.__n8nJobs[jobId].error = err.message;
+      }
     });
 
-    if (!res.ok) {
-      const errText = await res.text().catch(() => "");
-      return Response.json(
-        { error: `n8n webhook error (${res.status}): ${errText}` },
-        { status: res.status }
-      );
-    }
-
-    const data = await res.json();
-    return Response.json(data);
+    // Return immediately with job_id
+    return Response.json({ job_id: jobId, status: "processing", totalPages: pageIndices.length });
   } catch (err) {
     return Response.json({ error: err.message }, { status: 500 });
   }

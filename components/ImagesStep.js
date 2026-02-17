@@ -1,5 +1,5 @@
 "use client";
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { T, imgFmt } from "@/lib/constants";
 import { IMAGE_MODELS } from "@/lib/api";
 import Btn from "./ui/Btn";
@@ -13,8 +13,10 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
   const [genErr, setGenErr] = useState(null);
   const [copied, setCopied] = useState(null);
   const [pending, setPending] = useState(false);
-  const [pendingPages, setPendingPages] = useState(null); // which page indices are generating
-  const abortRef = useRef(null);
+  const [pendingPages, setPendingPages] = useState(null);
+  const [progress, setProgress] = useState(null); // { completed, total }
+  const [jobId, setJobId] = useState(null);
+  const pollRef = useRef(null);
 
   const copyPrompt = (idx) => {
     navigator.clipboard.writeText(prompts[idx]?.prompt || "");
@@ -33,7 +35,78 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
     })).filter(p => p.image_prompt);
   };
 
-  // Send pages to n8n — works for 1 page or all 22
+  // Poll for results from n8n-results endpoint
+  const startPolling = useCallback((jid, pageIndices) => {
+    if (pollRef.current) clearInterval(pollRef.current);
+
+    pollRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/n8n-results?job_id=${jid}`);
+        const data = await res.json();
+
+        if (data.error && res.status === 404) {
+          // Job not found — might have been cleaned up
+          clearInterval(pollRef.current);
+          pollRef.current = null;
+          setPending(false);
+          setPendingPages(null);
+          setProgress(null);
+          setJobId(null);
+          setGenErr("Job not found — it may have expired. Try generating again.");
+          return;
+        }
+
+        // Update progress
+        setProgress({ completed: data.completedPages || 0, total: data.totalPages || pageIndices.length });
+
+        // Apply any completed images incrementally
+        if (data.results && Object.keys(data.results).length > 0) {
+          setImages(prev => {
+            const next = { ...prev };
+            for (const [idxStr, result] of Object.entries(data.results)) {
+              const idx = parseInt(idxStr, 10);
+              const existingUrls = (next[idx] || []).map(img => img.url);
+              for (const v of (result.variants || [])) {
+                if (!existingUrls.includes(v.url)) {
+                  if (!next[idx]) next[idx] = [];
+                  next[idx] = [...next[idx], { url: v.url, model: v.model || selectedModel, ts: Date.now(), selected: false }];
+                }
+              }
+            }
+            return next;
+          });
+        }
+
+        // Check if done or errored
+        if (data.status === "done") {
+          clearInterval(pollRef.current);
+          pollRef.current = null;
+          setPending(false);
+          setPendingPages(null);
+          setProgress(null);
+          setJobId(null);
+        } else if (data.status === "error") {
+          clearInterval(pollRef.current);
+          pollRef.current = null;
+          setPending(false);
+          setPendingPages(null);
+          setProgress(null);
+          setJobId(null);
+          setGenErr(data.error || "n8n job failed");
+        }
+      } catch (e) {
+        // Network error — keep polling, don't give up
+        console.warn("Poll error:", e.message);
+      }
+    }, 3000); // Poll every 3 seconds
+  }, [selectedModel, setImages]);
+
+  // Clean up polling on unmount
+  useEffect(() => {
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, []);
+
+  // Send pages to n8n — fire and forget, then poll for results
   const generate = async (pageIndices) => {
     if (!settings?.n8nWebhookUrl) {
       setGenErr("n8n webhook URL not configured. Go to Settings → Connections to set it up.");
@@ -43,14 +116,11 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
     setGenErr(null);
     setPending(true);
     setPendingPages(pageIndices);
+    setProgress({ completed: 0, total: pageIndices.length });
 
     try {
-      const ac = new AbortController();
-      abortRef.current = ac;
-
       const res = await fetch("/api/n8n-send", {
         method: "POST",
-        signal: ac.signal,
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           mode: pageIndices.length === 1 ? "single" : "batch",
@@ -63,32 +133,28 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
       const data = await res.json();
       if (data.error) throw new Error(data.error);
 
-      // n8n returns results keyed by page index
-      if (data.results) {
-        setImages(prev => {
-          const next = { ...prev };
-          for (const [idxStr, result] of Object.entries(data.results)) {
-            const idx = parseInt(idxStr, 10);
-            if (!next[idx]) next[idx] = [];
-            for (const v of (result.variants || [])) {
-              next[idx] = [...next[idx], { url: v.url, model: v.model || selectedModel, ts: Date.now(), selected: false }];
-            }
-          }
-          return next;
-        });
-      }
+      // Got job_id — start polling
+      setJobId(data.job_id);
+      startPolling(data.job_id, pageIndices);
     } catch (e) {
-      if (e.name !== "AbortError") setGenErr(e.message);
+      setGenErr(e.message);
+      setPending(false);
+      setPendingPages(null);
+      setProgress(null);
     }
-    setPending(false);
-    setPendingPages(null);
   };
 
   const genAll = () => generate(Array.from({ length: prompts.length }, (_, i) => i));
   const genDirty = () => generate(dirtyPages || []);
   const genSingle = (idx) => generate([idx]);
 
-  const stopGen = () => { abortRef.current?.abort(); setPending(false); setPendingPages(null); };
+  const stopGen = () => {
+    if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
+    setPending(false);
+    setPendingPages(null);
+    setProgress(null);
+    setJobId(null);
+  };
 
   const removeImage = (pageIdx, imgIdx) => {
     setImages(prev => {
@@ -109,6 +175,7 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
 
   const totalImages = Object.values(images).reduce((s, a) => s + a.length, 0);
   const hasN8n = !!settings?.n8nWebhookUrl;
+  const pct = progress ? Math.round(progress.completed / progress.total * 100) : 0;
 
   return <div>
     <h2 style={{ fontSize: 22, fontWeight: 700, color: T.text, margin: "0 0 6px" }}>Image Generation</h2>
@@ -148,20 +215,23 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
       {!hasN8n && <div style={{ marginTop: 8, fontSize: 12, color: T.amber, fontWeight: 600 }}>
         Set your n8n webhook URL in Settings → Connections to enable image generation.
       </div>}
-      {/* Progress indicator */}
-      {pending && <div style={{ marginTop: 10 }}>
+      {/* Progress bar */}
+      {pending && progress && <div style={{ marginTop: 10 }}>
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: T.textSoft, marginBottom: 4 }}>
           <span>
-            {pendingPages?.length === 1
-              ? `Generating page ${pendingPages[0] + 1} via n8n...`
-              : `Generating ${pendingPages?.length || "all"} pages in parallel via n8n...`}
+            {progress.completed === 0
+              ? `Sending ${progress.total} page${progress.total !== 1 ? "s" : ""} to n8n...`
+              : `${progress.completed} of ${progress.total} pages complete`}
           </span>
+          <span>{pct}%</span>
         </div>
         <div style={{ height: 4, background: T.border, borderRadius: 2 }}>
           <div style={{
-            height: 4, background: T.amber, borderRadius: 2,
-            width: "100%",
-            animation: "sp .7s linear infinite",
+            height: 4, borderRadius: 2,
+            background: progress.completed === 0 ? T.amber : T.accent,
+            width: progress.completed === 0 ? "100%" : `${pct}%`,
+            transition: "width .3s",
+            animation: progress.completed === 0 ? "sp .7s linear infinite" : "none",
           }} />
         </div>
       </div>}
@@ -174,16 +244,18 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
       {prompts.map((p, i) => {
         const pageImages = images[i] || [];
         const isPagePending = pending && pendingPages?.includes(i);
+        const isPageDone = pending && progress && progress.completed > 0 && !!images[i]?.length;
         const isDirty = dirtyPages?.includes(i);
 
         return <div key={i} style={{
-          background: T.card, border: `1px solid ${isPagePending ? T.accent : isDirty ? T.amber : T.border}`,
+          background: T.card, border: `1px solid ${isPagePending && !isPageDone ? T.accent : isDirty ? T.amber : T.border}`,
           borderRadius: 10, padding: 14,
         }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
               <PageHdr idx={i} titleShort={outline?.[i]?.title_short} />
               {isDirty && <Pill color={T.amber}>Dirty</Pill>}
+              {isPagePending && isPageDone && <Pill color={T.accent}>✓</Pill>}
             </div>
             <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
               <button onClick={() => copyPrompt(i)} style={{
@@ -208,7 +280,7 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
             <p style={{ fontSize: 12, color: T.textSoft, lineHeight: 1.5, margin: "6px 0 0", whiteSpace: "pre-wrap" }}>{p.prompt || "—"}</p>
           </details>
 
-          {isPagePending && <Loader text={`Generating via n8n (${selectedModel})`} />}
+          {isPagePending && !isPageDone && <Loader text={`Generating via n8n (${selectedModel})`} />}
 
           {/* Image gallery */}
           {pageImages.length > 0 && (
