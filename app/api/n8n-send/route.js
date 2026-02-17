@@ -4,7 +4,7 @@
 // n8n processes images async, then POSTs results back to /api/n8n-callback.
 
 import { randomUUID } from "crypto";
-import { setJob, updateJob } from "@/lib/jobStore";
+import { createJob, setJobError } from "@/lib/jobStore";
 
 export async function POST(request) {
   const envUrl = process.env.N8N_WEBHOOK_URL || process.env.NEXT_PUBLIC_N8N_WEBHOOK_URL;
@@ -24,15 +24,9 @@ export async function POST(request) {
     const jobId = randomUUID();
     const pageIndices = (body.pages || []).map(p => p.page_index);
 
-    // Store job (Blob + filesystem)
+    // Store job metadata (write-once)
     console.log(`[n8n-send] Creating job ${jobId} for ${pageIndices.length} pages: [${pageIndices.join(",")}]`);
-    await setJob(jobId, {
-      status: "processing",
-      created: Date.now(),
-      totalPages: pageIndices.length,
-      completedPages: 0,
-      results: {},
-    });
+    await createJob(jobId, pageIndices.length);
 
     // Determine the callback URL for n8n to POST results back to
     const host = request.headers.get("host") || "localhost:3000";
@@ -57,10 +51,10 @@ export async function POST(request) {
 
       if (!n8nRes.ok) {
         const errText = await n8nRes.text().catch(() => "");
-        await updateJob(jobId, job => ({ ...job, status: "error", error: `n8n returned ${n8nRes.status}: ${errText}` }));
+        await setJobError(jobId, `n8n returned ${n8nRes.status}: ${errText}`);
       }
     } catch (err) {
-      await updateJob(jobId, job => ({ ...job, status: "error", error: err.message }));
+      await setJobError(jobId, err.message);
     }
 
     // Return with job_id (even if n8n had an error, frontend will pick it up via polling)

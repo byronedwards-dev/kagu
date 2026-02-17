@@ -1,9 +1,8 @@
 // GET /api/n8n-debug?job_id=xxx
-// Debug endpoint — returns raw job data from both Blob and filesystem.
-// Use this to diagnose why the frontend isn't seeing results.
+// Debug endpoint — shows raw job state from Blob and filesystem.
 
 import { list } from "@vercel/blob";
-import { readFileSync, existsSync } from "fs";
+import { readdirSync, readFileSync, existsSync } from "fs";
 import { join } from "path";
 
 export const dynamic = "force-dynamic";
@@ -15,46 +14,20 @@ export async function GET(request) {
   const result = {
     jobId,
     hasBlob: !!process.env.BLOB_READ_WRITE_TOKEN,
-    blobJob: null,
-    blobError: null,
-    fsJob: null,
-    fsError: null,
-    recentJobs: [],
+    blobFiles: [],
+    fsFiles: [],
+    assembledJob: null,
   };
 
-  // Check Blob
-  if (process.env.BLOB_READ_WRITE_TOKEN) {
+  // Check Blob files for this job
+  if (process.env.BLOB_READ_WRITE_TOKEN && jobId) {
     try {
-      const { blobs } = await list({ prefix: "kagu-jobs/" });
-      result.recentJobs = blobs.map(b => ({ pathname: b.pathname, url: b.url.slice(0, 80), uploadedAt: b.uploadedAt }));
-
-      if (jobId) {
-        const match = blobs.find(b => b.pathname.includes(jobId));
-        if (match) {
-          const bustUrl = match.url + (match.url.includes("?") ? "&" : "?") + `_t=${Date.now()}`;
-          const res = await fetch(bustUrl, { cache: "no-store" });
-          if (res.ok) {
-            const job = await res.json();
-            result.blobJob = {
-              status: job.status,
-              completedPages: job.completedPages,
-              totalPages: job.totalPages,
-              resultKeys: Object.keys(job.results || {}),
-              resultSummary: Object.entries(job.results || {}).map(([k, v]) => ({
-                page: k,
-                variantCount: v.variants?.length || 0,
-                urls: (v.variants || []).map(vv => vv.url?.slice(0, 60)),
-              })),
-              created: job.created,
-              ageMs: Date.now() - job.created,
-            };
-          } else {
-            result.blobError = `Fetch returned ${res.status}`;
-          }
-        } else {
-          result.blobError = "No blob found with this jobId";
-        }
-      }
+      const { blobs } = await list({ prefix: `kagu-jobs/${jobId}/` });
+      result.blobFiles = blobs.map(b => ({
+        pathname: b.pathname,
+        size: b.size,
+        uploadedAt: b.uploadedAt,
+      }));
     } catch (e) {
       result.blobError = e.message;
     }
@@ -63,29 +36,36 @@ export async function GET(request) {
   // Check filesystem
   if (jobId) {
     const JOBS_DIR = join(process.env.VERCEL ? "/tmp" : process.cwd(), ".n8n-jobs");
-    const path = join(JOBS_DIR, `${jobId}.json`);
+    const jobDir = join(JOBS_DIR, jobId);
     try {
-      if (existsSync(path)) {
-        const job = JSON.parse(readFileSync(path, "utf8"));
-        result.fsJob = {
-          status: job.status,
-          completedPages: job.completedPages,
-          totalPages: job.totalPages,
-          resultKeys: Object.keys(job.results || {}),
-          resultSummary: Object.entries(job.results || {}).map(([k, v]) => ({
-            page: k,
-            variantCount: v.variants?.length || 0,
-            urls: (v.variants || []).map(vv => vv.url?.slice(0, 60)),
-          })),
-          created: job.created,
-          ageMs: Date.now() - job.created,
-        };
+      if (existsSync(jobDir)) {
+        result.fsFiles = readdirSync(jobDir).map(f => {
+          try {
+            const content = JSON.parse(readFileSync(join(jobDir, f), "utf8"));
+            return { file: f, keys: Object.keys(content), preview: JSON.stringify(content).slice(0, 200) };
+          } catch {
+            return { file: f, error: "parse failed" };
+          }
+        });
       } else {
-        result.fsError = "File not found at " + path;
+        result.fsError = "Job directory not found";
       }
     } catch (e) {
       result.fsError = e.message;
     }
+  }
+
+  // List all recent jobs
+  if (process.env.BLOB_READ_WRITE_TOKEN) {
+    try {
+      const { blobs } = await list({ prefix: "kagu-jobs/" });
+      const jobIds = new Set();
+      for (const b of blobs) {
+        const parts = b.pathname.split("/");
+        if (parts.length >= 3) jobIds.add(parts[1]);
+      }
+      result.recentJobIds = [...jobIds].slice(0, 10);
+    } catch {}
   }
 
   return Response.json(result);
