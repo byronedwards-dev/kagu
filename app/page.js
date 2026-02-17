@@ -205,6 +205,7 @@ export default function App() {
 
   const genOutline = async () => {
     setErr(null); setLoading(true); cancelledRef.current = false; go("outline"); mark("characters");
+    setOutline([]);
     const all = [];
     const density = brief.text_density || "";
     const densityNote = density ? `\nText density: ${density}. Adjust number of image-only pages accordingly.` : "";
@@ -235,6 +236,7 @@ export default function App() {
 
   const genText = async () => {
     setErr(null); setLoading(true); cancelledRef.current = false; go("text"); mark("outline");
+    setText([]);
     const all = [];
     const h = outline.map(p => p.description || "").join("|");
     try {
@@ -244,7 +246,7 @@ export default function App() {
         const r = await api([{ role: "user", content: `BRIEF:\n${briefStr()}\nCHARACTERS:\n${chars}\nOUTLINE:\n${JSON.stringify(outline)}\n${all.length ? `TEXT SO FAR:\n${JSON.stringify(all)}\n` : ""}\nWrite text for ONLY images ${b + 1}-${Math.min(b + 3, outline.length)}:\n${JSON.stringify(batch)}\n\nMax 4 lines/page, 8-10 syl/line, ${brief.language_style || "rhyming"}, never rhyme with names.\nONLY raw JSON array of ${batch.length}: "page_number","text","image_only".` }], "text");
         if (cancelledRef.current) break; all.push(...parseJSON(r)); setText([...all]);
       }
-      setTextOutlineHash(h); setTextStale(false); setPromptsStale(false);
+      if (!cancelledRef.current) { setTextOutlineHash(h); setTextStale(false); setPromptsStale(false); }
     } catch (e) { if (e.name !== "AbortError") setErr(e.message); }
     setLoading(false);
   };
@@ -266,6 +268,7 @@ export default function App() {
 
   const genPrompts = async () => {
     setErr(null); setLoading(true); cancelledRef.current = false; go("prompts"); mark("text");
+    setPrompts([]);
     const all = [];
     try {
       for (let b = 0; b < outline.length; b += 3) {
@@ -275,7 +278,7 @@ export default function App() {
         const r = await api([{ role: "user", content: `BRIEF:\n${briefStr()}\nCHARACTERS (verbatim every prompt):\n${chars}\nSTYLE: ${brief.illustration_style || "IMAX, ultra hyper film still, cinematic"}\n\nPrompts for:\n${JSON.stringify(combined)}\n\nEach: page#/style/ratio, ONE scene, full chars redescribed, spreads="one panoramic image" (NEVER left/right/center/seam), chars SMALL in wide scene, facial expressions, nothing in center.\nONLY raw JSON array of ${bo.length}: "page_number","format","prompt".` }], "prompts");
         if (cancelledRef.current) break; all.push(...parseJSON(r)); setPrompts([...all]);
       }
-      setPromptsStale(false); setDirtyPages([]);
+      if (!cancelledRef.current) { setPromptsStale(false); setDirtyPages([]); }
     } catch (e) { if (e.name !== "AbortError") setErr(e.message); }
     setLoading(false);
   };
