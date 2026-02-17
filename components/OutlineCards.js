@@ -35,10 +35,10 @@ export default function OutlineCards({ outline, loading, lidx, onAI, onSave, onR
       </div>
       {!loading && outline.length > 0 && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", flexShrink: 0 }}>
         {text.length > 0
-          ? <><Btn small onClick={onViewText}>View Text →</Btn><Btn small ghost onClick={onGenText}>↻ Regen Text</Btn></>
+          ? <Btn small onClick={onViewText}>View Text →</Btn>
           : <Btn small onClick={onGenText}>Generate Text →</Btn>
         }
-        <Btn small ghost onClick={onRegenOutline}>↻ Regen Outline</Btn>
+        <Btn small ghost onClick={onRegenOutline}>↻ Regen Scenes</Btn>
       </div>}
     </div>
     <div style={{ display: "grid", gap: 6 }}>

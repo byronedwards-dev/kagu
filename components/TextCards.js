@@ -76,8 +76,8 @@ export default function TextCards({ text, outline, loading, lidx, onAI, onSave, 
         ? <><Btn onClick={onViewPrompts}>View Image Prompts →</Btn><Btn ghost onClick={onGenPrompts}>↻ Regen Prompts</Btn></>
         : <Btn onClick={onGenPrompts}>Generate Image Prompts →</Btn>
       }
-      <Btn ghost onClick={onRegenText}>↻ Regen Text</Btn>
-      <Btn ghost onClick={onRegenOutline}>↻ Regen Outline</Btn>
+      <Btn ghost onClick={onRegenText}>↻ Regen Copy</Btn>
+      <Btn ghost onClick={onRegenOutline}>↻ Regen Scenes</Btn>
     </div>}
   </div>;
 }
