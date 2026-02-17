@@ -9,7 +9,7 @@
 // Images are uploaded to Vercel Blob for persistent CDN storage.
 // Falls back to original URLs if BLOB_READ_WRITE_TOKEN is not configured.
 
-import { getJob, setJob, cleanOldJobs } from "@/lib/jobStore";
+import { getJob, mergeJobResults, cleanOldJobs } from "@/lib/jobStore";
 import { uploadImageToBlob } from "@/lib/blobUpload";
 
 function blobFilename(pageIndex, model) {
@@ -28,20 +28,25 @@ export async function POST(request) {
 
   const job = await getJob(jobId);
   if (!job) {
+    console.error(`[n8n-callback] Job ${jobId} not found`);
     return Response.json({ error: "Unknown job_id" }, { status: 404 });
   }
 
   try {
     const body = await request.json();
+    console.log(`[n8n-callback] job=${jobId} body_keys=${Object.keys(body)} isArray=${Array.isArray(body)}`);
+
+    // Collect all new results into a normalized map: { pageIdx: { variants: [...] } }
+    const newResults = {};
 
     // Support bulk results: { results: { "0": { variants: [...] }, ... } }
     if (body.results) {
       for (const [idxStr, result] of Object.entries(body.results)) {
         const idx = parseInt(idxStr, 10);
-        if (!job.results[idx]) job.results[idx] = { variants: [] };
+        if (!newResults[idx]) newResults[idx] = { variants: [] };
         for (const v of (result.variants || [])) {
           const blobUrl = await uploadImageToBlob(v.url, blobFilename(idx, v.model));
-          job.results[idx].variants.push({ url: blobUrl, model: v.model || "unknown" });
+          newResults[idx].variants.push({ url: blobUrl, model: v.model || "unknown" });
         }
       }
     }
@@ -49,11 +54,9 @@ export async function POST(request) {
     // Support single page callback: { page_index, url, model }
     if (body.page_index !== undefined && body.url) {
       const idx = body.page_index;
-      if (!job.results[idx]) {
-        job.results[idx] = { variants: [] };
-      }
+      if (!newResults[idx]) newResults[idx] = { variants: [] };
       const blobUrl = await uploadImageToBlob(body.url, blobFilename(idx, body.model));
-      job.results[idx].variants.push({ url: blobUrl, model: body.model || "unknown" });
+      newResults[idx].variants.push({ url: blobUrl, model: body.model || "unknown" });
     }
 
     // Support array of results: [{ page_index, url, model }, ...]
@@ -61,30 +64,33 @@ export async function POST(request) {
       for (const item of body) {
         if (item.page_index !== undefined && item.url) {
           const idx = item.page_index;
-          if (!job.results[idx]) {
-            job.results[idx] = { variants: [] };
-          }
+          if (!newResults[idx]) newResults[idx] = { variants: [] };
           const blobUrl = await uploadImageToBlob(item.url, blobFilename(idx, item.model));
-          job.results[idx].variants.push({ url: blobUrl, model: item.model || "unknown" });
+          newResults[idx].variants.push({ url: blobUrl, model: item.model || "unknown" });
         }
       }
     }
 
-    job.completedPages = Object.keys(job.results).length;
-
-    // Mark as done if all pages are in
-    if (job.completedPages >= job.totalPages) {
-      job.status = "done";
+    const newPages = Object.keys(newResults);
+    if (newPages.length === 0) {
+      console.warn(`[n8n-callback] No results parsed from body! Full body: ${JSON.stringify(body).slice(0, 500)}`);
+    } else {
+      console.log(`[n8n-callback] newResults pages: ${newPages.join(",")}`);
     }
 
-    // Save updated job
-    await setJob(jobId, job);
+    // Merge into existing job (handles concurrent callbacks safely)
+    const updated = await mergeJobResults(jobId, newResults, job.totalPages);
 
     // Occasionally clean old jobs
     if (Math.random() < 0.1) cleanOldJobs();
 
-    return Response.json({ ok: true, completedPages: job.completedPages, totalPages: job.totalPages });
+    const cp = updated?.completedPages || 0;
+    const tp = updated?.totalPages || job.totalPages;
+    console.log(`[n8n-callback] After merge: completedPages=${cp} totalPages=${tp} status=${updated?.status}`);
+
+    return Response.json({ ok: true, completedPages: cp, totalPages: tp });
   } catch (err) {
+    console.error(`[n8n-callback] Error:`, err.message);
     return Response.json({ error: err.message }, { status: 500 });
   }
 }

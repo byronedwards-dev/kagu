@@ -25,6 +25,7 @@ export async function POST(request) {
     const pageIndices = (body.pages || []).map(p => p.page_index);
 
     // Store job (Blob + filesystem)
+    console.log(`[n8n-send] Creating job ${jobId} for ${pageIndices.length} pages: [${pageIndices.join(",")}]`);
     await setJob(jobId, {
       status: "processing",
       created: Date.now(),
@@ -37,6 +38,7 @@ export async function POST(request) {
     const host = request.headers.get("host") || "localhost:3000";
     const proto = request.headers.get("x-forwarded-proto") || "https";
     const callbackUrl = `${proto}://${host}/api/n8n-callback?job_id=${jobId}`;
+    console.log(`[n8n-send] callbackUrl=${callbackUrl}`);
 
     // Send to n8n — await the initial response but don't wait for processing
     // n8n responds immediately, then processes in background

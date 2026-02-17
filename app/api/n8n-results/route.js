@@ -16,8 +16,12 @@ export async function GET(request) {
 
   const job = await getJob(jobId);
   if (!job) {
+    console.log(`[n8n-results] Job ${jobId} not found`);
     return Response.json({ error: "Unknown job_id" }, { status: 404 });
   }
+
+  const resultPages = Object.keys(job.results || {});
+  console.log(`[n8n-results] job=${jobId} status=${job.status} completed=${job.completedPages} total=${job.totalPages} resultPages=[${resultPages.join(",")}]`);
 
   // Occasionally clean old jobs
   if (Math.random() < 0.05) cleanOldJobs();
