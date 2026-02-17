@@ -136,6 +136,26 @@ export default function App() {
 
   const charNames = brief.character_names ? brief.character_names.split(/[,\s]+/).filter(Boolean) : [];
 
+  // ─── New Book (auto-save current, then clear) ───
+  const newBook = async () => {
+    // Only auto-save if there's meaningful content (at least a concept or outline)
+    const hasContent = selConcept || outline.length > 0 || text.length > 0;
+    if (hasContent) {
+      const label = selConcept?.title || brief.theme || "Untitled";
+      const ts = new Date().toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+      const key = "session:" + `${label} (${ts})`.toLowerCase().replace(/[^a-z0-9]/g, "-").slice(0, 60);
+      try { await storage.set(key, JSON.stringify({ name: `${label} (${ts})`, ts: Date.now(), state: getState() })); } catch {}
+    }
+    // Clear all book data
+    setBrief({}); setConcepts([]); setSelConcept(null); setChars("");
+    setOutline([]); setText([]); setPrompts([]); setImages({}); setDirtyPages([]);
+    setDone(new Set()); setStep("brief");
+    setTextStale(false); setPromptsStale(false);
+    setOutlineHash(""); setTextOutlineHash("");
+    setErr(null); setLoading(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   /* ═══════════════════════════════════════
      GENERATION FUNCTIONS
      ═══════════════════════════════════════ */
@@ -357,6 +377,8 @@ export default function App() {
             <p style={{ fontSize: 13, color: T.textDim, margin: 0, letterSpacing: .5 }}>Book Builder</p>
           </div>
           <div style={{ display: "flex", gap: 6 }}>
+            <button onClick={newBook} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 8, padding: "8px 14px", fontSize: 13, cursor: "pointer", color: T.textDim, fontFamily: "inherit" }}
+              onMouseEnter={e => e.target.style.color = T.accent} onMouseLeave={e => e.target.style.color = T.textDim}>+ New Book</button>
             <button onClick={() => setSessionsOpen(true)} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 8, padding: "8px 14px", fontSize: 13, cursor: "pointer", color: T.textDim, fontFamily: "inherit" }}
               onMouseEnter={e => e.target.style.color = T.accent} onMouseLeave={e => e.target.style.color = T.textDim}>📚 Templates</button>
             <button onClick={() => setSettingsOpen(true)} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 8, padding: "8px 14px", fontSize: 13, cursor: "pointer", color: T.textDim, fontFamily: "inherit" }}
