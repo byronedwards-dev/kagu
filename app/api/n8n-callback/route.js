@@ -5,8 +5,18 @@
 //   { results: { "0": { variants: [{ url, model }] }, ... } }
 //   { page_index: 0, url: "...", model: "..." }
 //   [{ page_index: 0, url: "...", model: "..." }, ...]
+//
+// Images are uploaded to Vercel Blob for persistent CDN storage.
+// Falls back to original URLs if BLOB_READ_WRITE_TOKEN is not configured.
 
 import { getJob, setJob, cleanOldJobs } from "@/lib/jobStore";
+import { uploadImageToBlob } from "@/lib/blobUpload";
+
+function blobFilename(pageIndex, model) {
+  const ts = Date.now();
+  const safeModel = (model || "unknown").replace(/[^a-z0-9-]/gi, "-");
+  return `kagu/page-${pageIndex}-${safeModel}-${ts}.png`;
+}
 
 export async function POST(request) {
   const { searchParams } = new URL(request.url);
@@ -16,7 +26,7 @@ export async function POST(request) {
     return Response.json({ error: "job_id required" }, { status: 400 });
   }
 
-  const job = getJob(jobId);
+  const job = await getJob(jobId);
   if (!job) {
     return Response.json({ error: "Unknown job_id" }, { status: 404 });
   }
@@ -28,7 +38,11 @@ export async function POST(request) {
     if (body.results) {
       for (const [idxStr, result] of Object.entries(body.results)) {
         const idx = parseInt(idxStr, 10);
-        job.results[idx] = result;
+        if (!job.results[idx]) job.results[idx] = { variants: [] };
+        for (const v of (result.variants || [])) {
+          const blobUrl = await uploadImageToBlob(v.url, blobFilename(idx, v.model));
+          job.results[idx].variants.push({ url: blobUrl, model: v.model || "unknown" });
+        }
       }
     }
 
@@ -38,7 +52,8 @@ export async function POST(request) {
       if (!job.results[idx]) {
         job.results[idx] = { variants: [] };
       }
-      job.results[idx].variants.push({ url: body.url, model: body.model || "unknown" });
+      const blobUrl = await uploadImageToBlob(body.url, blobFilename(idx, body.model));
+      job.results[idx].variants.push({ url: blobUrl, model: body.model || "unknown" });
     }
 
     // Support array of results: [{ page_index, url, model }, ...]
@@ -49,7 +64,8 @@ export async function POST(request) {
           if (!job.results[idx]) {
             job.results[idx] = { variants: [] };
           }
-          job.results[idx].variants.push({ url: item.url, model: item.model || "unknown" });
+          const blobUrl = await uploadImageToBlob(item.url, blobFilename(idx, item.model));
+          job.results[idx].variants.push({ url: blobUrl, model: item.model || "unknown" });
         }
       }
     }
@@ -62,7 +78,7 @@ export async function POST(request) {
     }
 
     // Save updated job
-    setJob(jobId, job);
+    await setJob(jobId, job);
 
     // Occasionally clean old jobs
     if (Math.random() < 0.1) cleanOldJobs();

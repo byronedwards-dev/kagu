@@ -24,8 +24,8 @@ export async function POST(request) {
     const jobId = randomUUID();
     const pageIndices = (body.pages || []).map(p => p.page_index);
 
-    // Store job to filesystem
-    setJob(jobId, {
+    // Store job (Blob + filesystem)
+    await setJob(jobId, {
       status: "processing",
       created: Date.now(),
       totalPages: pageIndices.length,
@@ -55,10 +55,10 @@ export async function POST(request) {
 
       if (!n8nRes.ok) {
         const errText = await n8nRes.text().catch(() => "");
-        updateJob(jobId, job => ({ ...job, status: "error", error: `n8n returned ${n8nRes.status}: ${errText}` }));
+        await updateJob(jobId, job => ({ ...job, status: "error", error: `n8n returned ${n8nRes.status}: ${errText}` }));
       }
     } catch (err) {
-      updateJob(jobId, job => ({ ...job, status: "error", error: err.message }));
+      await updateJob(jobId, job => ({ ...job, status: "error", error: err.message }));
     }
 
     // Return with job_id (even if n8n had an error, frontend will pick it up via polling)

@@ -14,7 +14,7 @@ export async function GET(request) {
     return Response.json({ error: "job_id required" }, { status: 400 });
   }
 
-  const job = getJob(jobId);
+  const job = await getJob(jobId);
   if (!job) {
     return Response.json({ error: "Unknown job_id" }, { status: 404 });
   }
