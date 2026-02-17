@@ -56,7 +56,7 @@ function joinCharBlocks(blocks) {
   return blocks.map(b => b.text).join("\n\n");
 }
 
-export default function CharEditor({ content, loading, onManual, onAI, onNext, nextLabel }) {
+export default function CharEditor({ content, loading, onManual, onAI, onGenOutline, onViewOutline }) {
   const blocks = splitCharBlocks(content);
   const multiBlock = blocks.length > 1;
 
@@ -102,6 +102,9 @@ export default function CharEditor({ content, loading, onManual, onAI, onNext, n
     )}
 
     <AIBar onSubmit={onAI} placeholder="e.g., Add freckles, make puppy fluffier..." />
-    {onNext && <div style={{ marginTop: 16 }}><Btn onClick={onNext}>{nextLabel}</Btn></div>}
+    <div style={{ marginTop: 16, display: "flex", gap: 8 }}>
+      {onGenOutline && <Btn onClick={onGenOutline}>Generate Outline →</Btn>}
+      {onViewOutline && <Btn ghost onClick={onViewOutline}>View Outline →</Btn>}
+    </div>
   </div>;
 }

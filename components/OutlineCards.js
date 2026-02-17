@@ -25,7 +25,7 @@ function OCard({ page, idx, lidx, onAI, onSave }) {
   </div>;
 }
 
-export default function OutlineCards({ outline, loading, lidx, onAI, onSave, text, onGenText, onViewText }) {
+export default function OutlineCards({ outline, loading, lidx, onAI, onSave, onRegenOutline, text, onGenText, onViewText }) {
   if (loading && !outline.length) return <><h2 style={{ fontSize: 22, fontWeight: 700, color: T.text }}>Page Outline</h2><Loader text="Building outline (batch 1/2)" /></>;
   return <div>
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
@@ -38,6 +38,7 @@ export default function OutlineCards({ outline, loading, lidx, onAI, onSave, tex
           ? <><Btn small onClick={onViewText}>View Text →</Btn><Btn small ghost onClick={onGenText}>↻ Regen Text</Btn></>
           : <Btn small onClick={onGenText}>Generate Text →</Btn>
         }
+        <Btn small ghost onClick={onRegenOutline}>↻ Regen Outline</Btn>
       </div>}
     </div>
     <div style={{ display: "grid", gap: 6 }}>

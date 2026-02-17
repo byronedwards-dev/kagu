@@ -58,7 +58,7 @@ function TCard({ page, op, idx, lidx, onAI, onSave, onSaveScene, charNames }) {
   </div>;
 }
 
-export default function TextCards({ text, outline, loading, lidx, onAI, onSave, onSaveScene, textStale, prompts, onGenPrompts, onViewPrompts, onRegenText, charNames }) {
+export default function TextCards({ text, outline, loading, lidx, onAI, onSave, onSaveScene, onRegenOutline, textStale, prompts, onGenPrompts, onViewPrompts, onRegenText, charNames }) {
   // Total word count
   const totalWords = text.reduce((sum, p) => sum + (p.text || "").split(/\s+/).filter(Boolean).length, 0);
 
@@ -73,10 +73,11 @@ export default function TextCards({ text, outline, loading, lidx, onAI, onSave, 
     {loading && <Loader text="Generating next batch" />}
     {!loading && text.length > 0 && <div style={{ marginTop: 16, display: "flex", gap: 8, flexWrap: "wrap" }}>
       {prompts.length > 0
-        ? <><Btn onClick={onViewPrompts}>View Image Prompts →</Btn><Btn ghost onClick={onGenPrompts}>↻ Regenerate Prompts</Btn></>
+        ? <><Btn onClick={onViewPrompts}>View Image Prompts →</Btn><Btn ghost onClick={onGenPrompts}>↻ Regen Prompts</Btn></>
         : <Btn onClick={onGenPrompts}>Generate Image Prompts →</Btn>
       }
-      {textStale && <Btn ghost danger onClick={onRegenText}>↻ Regenerate Text (outline changed)</Btn>}
+      <Btn ghost onClick={onRegenText}>↻ Regen Text</Btn>
+      <Btn ghost onClick={onRegenOutline}>↻ Regen Outline</Btn>
     </div>}
   </div>;
 }

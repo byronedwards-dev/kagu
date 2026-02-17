@@ -313,13 +313,13 @@ export default function App() {
         return <ConceptCards concepts={concepts} loading={loading} onSelect={pickConcept} onRegen={genConcepts} characterSetup={brief.character_setup} />;
       case "characters":
         return <CharEditor content={chars} loading={loading} onManual={setChars} onAI={aiEditChars}
-          onNext={outline.length ? () => go("outline") : genOutline} nextLabel={outline.length ? "View Outline →" : "Generate Outline →"} />;
+          onGenOutline={genOutline} onViewOutline={outline.length ? () => go("outline") : null} />;
       case "outline":
         return <OutlineCards outline={outline} loading={loading} lidx={lidx} onAI={aiEditOutline} onSave={manualOutline}
-          text={text} onGenText={genText} onViewText={() => go("text")} />;
+          onRegenOutline={genOutline} text={text} onGenText={genText} onViewText={() => go("text")} />;
       case "text":
         return <TextCards text={text} outline={outline} loading={loading} lidx={lidx} onAI={aiEditText} onSave={manualText}
-          onSaveScene={manualOutline} textStale={textStale} prompts={prompts} onGenPrompts={genPrompts} onViewPrompts={() => go("prompts")}
+          onSaveScene={manualOutline} onRegenOutline={genOutline} textStale={textStale} prompts={prompts} onGenPrompts={genPrompts} onViewPrompts={() => go("prompts")}
           onRegenText={genText} charNames={charNames} />;
       case "prompts":
         return <PromptCards prompts={prompts} loading={loading} lidx={lidx} onAI={editPrompt} onRegenOne={regenOnePrompt}

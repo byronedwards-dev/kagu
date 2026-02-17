@@ -51,7 +51,7 @@ export default function BriefForm({ brief, set, onSubmit, loading }) {
         <Field label="Sidekick Details" note="Breed, age, max 2 accessories"><Inp value={brief.sidekick_details} onChange={v => s("sidekick_details", v)} placeholder="e.g., 5-month Golden Retriever, red bandana" /></Field>
       </div>}
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
-        <Field label="Name(s)"><Inp value={brief.character_names} onChange={v => s("character_names", v)} placeholder="Max" /></Field>
+        <Field label="Placeholder Name" note="Reader personalizes later"><Inp value={brief.character_names} onChange={v => s("character_names", v)} placeholder="Max" /></Field>
         <Field label="Age"><Inp value={brief.character_age} onChange={v => s("character_age", v)} placeholder="4 years old" /></Field>
         <Field label="Trait"><Inp value={brief.character_trait} onChange={v => s("character_trait", v)} placeholder="playful" /></Field>
       </div>
