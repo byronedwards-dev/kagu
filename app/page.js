@@ -281,25 +281,14 @@ export default function App() {
     setLoading(false);
   };
 
-  // Re-inject updated character descriptions into existing prompts (lightweight AI swap)
-  const reinjectChars = async () => {
+  // Re-inject updated character descriptions into existing prompts (instant string swap — no AI call needed)
+  const reinjectChars = () => {
     if (!prompts.length || !chars.trim()) return;
-    setErr(null); setLoading(true); cancelledRef.current = false;
-    const BATCH = 6;
-    const batches = [];
-    for (let b = 0; b < prompts.length; b += BATCH) batches.push({ start: b, end: Math.min(b + BATCH, prompts.length) });
-    try {
-      const results = await Promise.all(batches.map(({ start, end }) => {
-        const batch = prompts.slice(start, end);
-        const batchText = batch.map((p, i) => `[Page ${start + i + 1}]\n${p.prompt}`).join("\n\n---\n\n");
-        return api([{ role: "user", content: `NEW CHARACTER DESCRIPTIONS:\n${chars}\n\nEXISTING PROMPTS:\n${batchText}\n\nReplace ALL character description sections in each prompt with the NEW descriptions above. Keep everything else IDENTICAL — same scene, composition, camera angle, lighting, format, aspect ratio. Only swap the character appearance details.\n\nReturn ONLY raw JSON array of ${batch.length} objects: [{"page_number": N, "format": "...", "prompt": "..."}]` }], "prompts");
-      }));
-      if (!cancelledRef.current) {
-        setPrompts(results.flatMap(r => parseJSON(r)));
-        setDirtyPages(Array.from({ length: prompts.length }, (_, i) => i));
-      }
-    } catch (e) { if (e.name !== "AbortError") setErr(e.message); }
-    setLoading(false);
+    setPrompts(prev => prev.map(p => {
+      const scene = stripInjected(p.prompt);
+      return { ...p, prompt: buildFinalPrompt(scene) };
+    }));
+    setDirtyPages(Array.from({ length: prompts.length }, (_, i) => i));
   };
 
   const genOutline = async () => {
@@ -459,12 +448,30 @@ export default function App() {
     setDirtyPages(p => p.includes(i) ? p : [...p, i]);
   };
 
+  // Strip injected style prefix and character block from a prompt to get scene-only text
+  const stripInjected = (prompt) => {
+    let s = prompt;
+    // Remove style prefix (everything before first period+space that matches the style)
+    const style = brief.illustration_style || "IMAX, ultra hyper film still, cinematic";
+    if (s.startsWith(style + ". ")) s = s.slice(style.length + 2);
+    // Remove character block at end
+    const charMarker = "\n\nCHARACTER DESCRIPTIONS (exact):";
+    const ci = s.indexOf(charMarker);
+    if (ci !== -1) s = s.slice(0, ci);
+    return s.trim();
+  };
+
+  // Build the final prompt string: style prefix + scene + character block
+  const buildFinalPrompt = (scenePrompt) => {
+    const style = brief.illustration_style || "IMAX, ultra hyper film still, cinematic";
+    const charBlock = chars.trim() ? `\n\nCHARACTER DESCRIPTIONS (exact):\n${chars.trim()}` : "";
+    return `${style}. ${scenePrompt}${charBlock}`;
+  };
+
   const genPrompts = async () => {
     setErr(null); setLoading(true); cancelledRef.current = false; go("prompts"); mark("text");
     setPrompts([]); setConsistencyResult(null);
     const BATCH = 6; // pages per batch
-    const style = brief.illustration_style || "IMAX, ultra hyper film still, cinematic";
-    const stylePrefix = `Children's book illustration, ${style}. `;
     const batches = [];
     for (let b = 0; b < outline.length; b += BATCH) {
       batches.push({ start: b, end: Math.min(b + BATCH, outline.length) });
@@ -474,12 +481,12 @@ export default function App() {
       const results = await Promise.all(batches.map(({ start, end }) => {
         const bo = outline.slice(start, end), bt = text.slice(start, end);
         const combined = bo.map((p, i) => ({ ...p, story_text: bt[i]?.text }));
-        return api([{ role: "user", content: `BRIEF:\n${briefStr()}\nCHARACTERS (verbatim every prompt):\n${chars}\nSTYLE: ${style}\n\nPrompts for:\n${JSON.stringify(combined)}\n\nDo NOT include art style keywords at the start of prompts — a style prefix will be added automatically.\nEach: page#/ratio, ONE scene, full chars redescribed, spreads="one panoramic image" (NEVER left/right/center/seam), chars SMALL in wide scene, facial expressions, nothing in center.\nONLY raw JSON array of ${bo.length}: "page_number","format","prompt".` }], "prompts");
+        return api([{ role: "user", content: `BRIEF:\n${briefStr()}\nSTYLE: ${brief.illustration_style || "IMAX, ultra hyper film still, cinematic"}\n\nPrompts for:\n${JSON.stringify(combined)}\n\nIMPORTANT: Write SCENE-ONLY prompts. Do NOT include any art style keywords or character appearance descriptions in the prompt — both will be injected programmatically as exact variables.\nDescribe ONLY: composition, camera angle, lighting, setting details, character poses/actions/expressions (by name only, e.g. "Max runs toward..."), and scene elements.\nSpreads = "one panoramic image" (NEVER left/right/center/seam), chars SMALL in wide scene, nothing in center.\nONLY raw JSON array of ${bo.length}: "page_number","format","prompt".` }], "prompts");
       }));
       if (!cancelledRef.current) {
-        // Prepend identical style prefix to every prompt
+        // Inject identical style prefix + character block into every prompt
         const all = results.flatMap(r => parseJSON(r)).map(p => ({
-          ...p, prompt: p.prompt?.startsWith(stylePrefix) ? p.prompt : stylePrefix + p.prompt,
+          ...p, prompt: buildFinalPrompt(p.prompt),
         }));
         setPrompts(all);
         setPromptsStale(false); setDirtyPages([]);
@@ -490,13 +497,13 @@ export default function App() {
 
   const editPrompt = async (i, inst) => {
     setErr(null); setLidx(i);
-    const style = brief.illustration_style || "IMAX, ultra hyper film still, cinematic";
-    const stylePrefix = `Children's book illustration, ${style}. `;
     try {
       const combined = { ...outline[i], story_text: text[i]?.text };
-      const r = await api([{ role: "user", content: `BRIEF:\n${briefStr()}\nCHARACTERS (verbatim every prompt):\n${chars}\nSTYLE: ${style}\nSCENE+TEXT:\n${JSON.stringify(combined)}\n\nCurrent prompt:\n${JSON.stringify(prompts[i])}\n\nChange: "${inst}"\nDo NOT include art style keywords at the start — a style prefix is added automatically.\nEach: page#/ratio, ONE scene, full chars redescribed, spreads="one panoramic image" (NEVER left/right/center/seam), chars SMALL in wide scene, facial expressions, nothing in center.\nONLY raw JSON: page_number,format,prompt.` }], "prompts");
+      // Strip the injected style/chars to give Claude only the scene portion
+      const sceneOnly = stripInjected(prompts[i]?.prompt || "");
+      const r = await api([{ role: "user", content: `BRIEF:\n${briefStr()}\nSCENE+TEXT:\n${JSON.stringify(combined)}\n\nCurrent scene prompt:\n${sceneOnly}\n\nChange: "${inst}"\nIMPORTANT: Write SCENE-ONLY prompt. Do NOT include any art style keywords or character appearance descriptions — both are injected programmatically.\nDescribe ONLY: composition, camera angle, lighting, setting details, character poses/actions/expressions (by name only), and scene elements.\nSpreads = "one panoramic image" (NEVER left/right/center/seam), chars SMALL in wide scene, nothing in center.\nONLY raw JSON: page_number,format,prompt.` }], "prompts");
       const parsed = parseJSON(r);
-      const fixed = { ...parsed, prompt: parsed.prompt?.startsWith(stylePrefix) ? parsed.prompt : stylePrefix + parsed.prompt };
+      const fixed = { ...parsed, prompt: buildFinalPrompt(parsed.prompt) };
       setPrompts(p => p.map((x, j) => j === i ? fixed : x));
       setDirtyPages(p => p.includes(i) ? p : [...p, i]);
     } catch (e) { if (e.name !== "AbortError") setErr(e.message); }
@@ -505,13 +512,11 @@ export default function App() {
 
   const regenOnePrompt = async (i) => {
     setErr(null); setLidx(i);
-    const style = brief.illustration_style || "IMAX, ultra hyper film still, cinematic";
-    const stylePrefix = `Children's book illustration, ${style}. `;
     try {
       const combined = { ...outline[i], story_text: text[i]?.text };
-      const r = await api([{ role: "user", content: `BRIEF:\n${briefStr()}\nCHARACTERS (verbatim every prompt):\n${chars}\nSTYLE: ${style}\n\nGenerate prompt for:\n${JSON.stringify(combined)}\n\nDo NOT include art style keywords at the start — a style prefix is added automatically.\nEach: page#/ratio, ONE scene, full chars redescribed, spreads="one panoramic image" (NEVER left/right/center/seam), chars SMALL in wide scene, facial expressions, nothing in center.\nONLY raw JSON: page_number,format,prompt.` }], "prompts");
+      const r = await api([{ role: "user", content: `BRIEF:\n${briefStr()}\nSTYLE: ${brief.illustration_style || "IMAX, ultra hyper film still, cinematic"}\n\nGenerate prompt for:\n${JSON.stringify(combined)}\n\nIMPORTANT: Write SCENE-ONLY prompt. Do NOT include any art style keywords or character appearance descriptions — both are injected programmatically.\nDescribe ONLY: composition, camera angle, lighting, setting details, character poses/actions/expressions (by name only), and scene elements.\nSpreads = "one panoramic image" (NEVER left/right/center/seam), chars SMALL in wide scene, nothing in center.\nONLY raw JSON: page_number,format,prompt.` }], "prompts");
       const parsed = parseJSON(r);
-      const fixed = { ...parsed, prompt: parsed.prompt?.startsWith(stylePrefix) ? parsed.prompt : stylePrefix + parsed.prompt };
+      const fixed = { ...parsed, prompt: buildFinalPrompt(parsed.prompt) };
       setPrompts(p => p.map((x, j) => j === i ? fixed : x));
       setDirtyPages(p => p.includes(i) ? p : [...p, i]);
     } catch (e) { if (e.name !== "AbortError") setErr(e.message); }
