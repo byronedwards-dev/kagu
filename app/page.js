@@ -103,12 +103,23 @@ export default function App() {
 
   const api = useCallback((msgs, stepName) => {
     const c = new AbortController();
-    abortRef.current = c;
+    // Track all active controllers for parallel abort
+    if (!abortRef.current || abortRef.current.signal?.aborted) abortRef.current = new Set();
+    if (abortRef.current instanceof Set) abortRef.current.add(c);
+    else abortRef.current = new Set([c]);
     const sysPrompt = assembleSystemPrompt(rules, stepName || step, { hasCompanion });
-    return callClaude(msgs, sysPrompt, c.signal, claudeModel || undefined);
+    return callClaude(msgs, sysPrompt, c.signal, claudeModel || undefined).finally(() => {
+      if (abortRef.current instanceof Set) abortRef.current.delete(c);
+    });
   }, [rules, step, hasCompanion, claudeModel]);
 
-  const stopGen = () => { cancelledRef.current = true; if (abortRef.current) abortRef.current.abort(); setLoading(false); };
+  const stopGen = () => {
+    cancelledRef.current = true;
+    if (abortRef.current instanceof Set) abortRef.current.forEach(c => c.abort());
+    else if (abortRef.current) abortRef.current.abort();
+    abortRef.current = new Set();
+    setLoading(false);
+  };
 
   // ─── Outline staleness ───
   useEffect(() => {
@@ -274,18 +285,17 @@ export default function App() {
   const reinjectChars = async () => {
     if (!prompts.length || !chars.trim()) return;
     setErr(null); setLoading(true); cancelledRef.current = false;
-    const updated = [];
+    const BATCH = 6;
+    const batches = [];
+    for (let b = 0; b < prompts.length; b += BATCH) batches.push({ start: b, end: Math.min(b + BATCH, prompts.length) });
     try {
-      for (let b = 0; b < prompts.length; b += 5) {
-        if (cancelledRef.current) break;
-        const batch = prompts.slice(b, b + 5);
-        const batchText = batch.map((p, i) => `[Page ${b + i + 1}]\n${p.prompt}`).join("\n\n---\n\n");
-        const r = await api([{ role: "user", content: `NEW CHARACTER DESCRIPTIONS:\n${chars}\n\nEXISTING PROMPTS:\n${batchText}\n\nReplace ALL character description sections in each prompt with the NEW descriptions above. Keep everything else IDENTICAL — same scene, composition, camera angle, lighting, format, aspect ratio. Only swap the character appearance details.\n\nReturn ONLY raw JSON array of ${batch.length} objects: [{"page_number": N, "format": "...", "prompt": "..."}]` }], "prompts");
-        if (cancelledRef.current) break;
-        updated.push(...parseJSON(r));
-      }
+      const results = await Promise.all(batches.map(({ start, end }) => {
+        const batch = prompts.slice(start, end);
+        const batchText = batch.map((p, i) => `[Page ${start + i + 1}]\n${p.prompt}`).join("\n\n---\n\n");
+        return api([{ role: "user", content: `NEW CHARACTER DESCRIPTIONS:\n${chars}\n\nEXISTING PROMPTS:\n${batchText}\n\nReplace ALL character description sections in each prompt with the NEW descriptions above. Keep everything else IDENTICAL — same scene, composition, camera angle, lighting, format, aspect ratio. Only swap the character appearance details.\n\nReturn ONLY raw JSON array of ${batch.length} objects: [{"page_number": N, "format": "...", "prompt": "..."}]` }], "prompts");
+      }));
       if (!cancelledRef.current) {
-        setPrompts(updated);
+        setPrompts(results.flatMap(r => parseJSON(r)));
         setDirtyPages(Array.from({ length: prompts.length }, (_, i) => i));
       }
     } catch (e) { if (e.name !== "AbortError") setErr(e.message); }
@@ -452,16 +462,23 @@ export default function App() {
   const genPrompts = async () => {
     setErr(null); setLoading(true); cancelledRef.current = false; go("prompts"); mark("text");
     setPrompts([]); setConsistencyResult(null);
-    const all = [];
+    const BATCH = 6; // pages per batch
+    const batches = [];
+    for (let b = 0; b < outline.length; b += BATCH) {
+      batches.push({ start: b, end: Math.min(b + BATCH, outline.length) });
+    }
     try {
-      for (let b = 0; b < outline.length; b += 3) {
-        if (cancelledRef.current) break;
-        const bo = outline.slice(b, b + 3), bt = text.slice(b, b + 3);
+      // Fire all batches in parallel
+      const results = await Promise.all(batches.map(({ start, end }) => {
+        const bo = outline.slice(start, end), bt = text.slice(start, end);
         const combined = bo.map((p, i) => ({ ...p, story_text: bt[i]?.text }));
-        const r = await api([{ role: "user", content: `BRIEF:\n${briefStr()}\nCHARACTERS (verbatim every prompt):\n${chars}\nSTYLE: ${brief.illustration_style || "IMAX, ultra hyper film still, cinematic"}\n\nPrompts for:\n${JSON.stringify(combined)}\n\nEach: page#/style/ratio, ONE scene, full chars redescribed, spreads="one panoramic image" (NEVER left/right/center/seam), chars SMALL in wide scene, facial expressions, nothing in center.\nONLY raw JSON array of ${bo.length}: "page_number","format","prompt".` }], "prompts");
-        if (cancelledRef.current) break; all.push(...parseJSON(r)); setPrompts([...all]);
+        return api([{ role: "user", content: `BRIEF:\n${briefStr()}\nCHARACTERS (verbatim every prompt):\n${chars}\nSTYLE: ${brief.illustration_style || "IMAX, ultra hyper film still, cinematic"}\n\nPrompts for:\n${JSON.stringify(combined)}\n\nEach: page#/style/ratio, ONE scene, full chars redescribed, spreads="one panoramic image" (NEVER left/right/center/seam), chars SMALL in wide scene, facial expressions, nothing in center.\nONLY raw JSON array of ${bo.length}: "page_number","format","prompt".` }], "prompts");
+      }));
+      if (!cancelledRef.current) {
+        const all = results.flatMap(r => parseJSON(r));
+        setPrompts(all);
+        setPromptsStale(false); setDirtyPages([]);
       }
-      if (!cancelledRef.current) { setPromptsStale(false); setDirtyPages([]); }
     } catch (e) { if (e.name !== "AbortError") setErr(e.message); }
     setLoading(false);
   };
