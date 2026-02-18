@@ -1,7 +1,7 @@
 "use client";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { T, imgFmt } from "@/lib/constants";
-import { IMAGE_MODELS } from "@/lib/api";
+import { IMAGE_MODELS, MODEL_TIERS } from "@/lib/api";
 import Btn from "./ui/Btn";
 import Pill from "./ui/Pill";
 import Loader from "./ui/Loader";
@@ -282,24 +282,34 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
         <div style={{ fontSize: 12, fontWeight: 700, color: T.textSoft, textTransform: "uppercase", letterSpacing: .5 }}>Models</div>
         <span style={{ fontSize: 11, color: T.textDim }}>{modelCount} selected · click to toggle</span>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 8 }}>
-        {IMAGE_MODELS.map(m => {
-          const active = selectedModels.has(m.id);
-          return <button key={m.id} onClick={() => toggleModel(m.id)} style={{
-            background: active ? T.accentBg : "transparent",
-            border: `1px solid ${active ? T.accent : T.border}`,
-            borderRadius: 10, padding: "10px 12px", textAlign: "left", cursor: "pointer", transition: "all .15s",
-            position: "relative",
-          }}>
-            {active && <div style={{
-              position: "absolute", top: 6, right: 8, fontSize: 10, color: T.accent, fontWeight: 700,
-            }}>✓</div>}
-            <div style={{ fontSize: 13, fontWeight: 700, color: active ? T.accent : T.text }}>{m.name}</div>
-            <div style={{ fontSize: 11, color: T.textDim, marginTop: 2 }}>{m.provider} · {m.cost}</div>
-            <div style={{ fontSize: 11, color: T.textSoft, marginTop: 2 }}>{m.best_for}</div>
-          </button>;
-        })}
-      </div>
+      {MODEL_TIERS.map(tier => {
+        const models = IMAGE_MODELS.filter(m => m.tier === tier.id);
+        if (!models.length) return null;
+        return <div key={tier.id} style={{ marginBottom: 12 }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 6 }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: T.text }}>{tier.label}</span>
+            <span style={{ fontSize: 11, color: T.textDim }}>{tier.description}</span>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 8 }}>
+            {models.map(m => {
+              const active = selectedModels.has(m.id);
+              return <button key={m.id} onClick={() => toggleModel(m.id)} style={{
+                background: active ? T.accentBg : "transparent",
+                border: `1px solid ${active ? T.accent : T.border}`,
+                borderRadius: 10, padding: "10px 12px", textAlign: "left", cursor: "pointer", transition: "all .15s",
+                position: "relative",
+              }}>
+                {active && <div style={{
+                  position: "absolute", top: 6, right: 8, fontSize: 10, color: T.accent, fontWeight: 700,
+                }}>✓</div>}
+                <div style={{ fontSize: 13, fontWeight: 700, color: active ? T.accent : T.text }}>{m.name}</div>
+                <div style={{ fontSize: 11, color: T.textDim, marginTop: 2 }}>{m.provider} · {m.cost}</div>
+                <div style={{ fontSize: 11, color: T.textSoft, marginTop: 2 }}>{m.best_for}</div>
+              </button>;
+            })}
+          </div>
+        </div>;
+      })}
     </div>
 
     {genErr && <ErrBox msg={genErr} onDismiss={() => setGenErr(null)} />}

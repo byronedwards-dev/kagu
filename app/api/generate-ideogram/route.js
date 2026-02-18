@@ -18,10 +18,11 @@ export async function POST(request) {
     const body = await request.json();
 
     // V3 uses simpler aspect ratio format: "1x1", "2x1", "16x9", etc.
+    // Kagu "1:2" means 1-high-by-2-wide (landscape spread) → Ideogram "2x1"
     const ratioMap = {
       "1:1": "1x1",
-      "1:2": "1x2",
-      "2:1": "2x1",
+      "1:2": "2x1",
+      "2:1": "1x2",
       "16:9": "16x9",
       "9:16": "9x16",
       "3:2": "3x2",
