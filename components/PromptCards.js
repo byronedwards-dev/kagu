@@ -90,7 +90,7 @@ export default function PromptCards({ prompts, loading, lidx, onAI, onRegenOne, 
         {brief && setBrief && <InlinePillEditor label="Style" value={brief.illustration_style} onChange={v => setBrief(p => ({ ...p, illustration_style: v }))} options={ILLUSTRATION_STYLES} />}
       </div>
       {prompts.length > 0 && <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
-        <Btn small onClick={onGoImages} disabled={loading}>Generate Images →</Btn>
+        <Btn small onClick={onGoImages} disabled={loading}>Go to Images →</Btn>
         <Btn small ghost onClick={onGenPrompts} disabled={loading}>↻ Regen All</Btn>
       </div>}
     </div>
