@@ -53,7 +53,7 @@ export default function BookPreview({ outline, text, images, pageFormats }) {
             {/* Image */}
             <div style={{
               flex: isSpread ? "none" : "0 0 50%",
-              background: "#111",
+              background: T.bg,
               display: "flex", alignItems: "center", justifyContent: "center",
               minHeight: isSpread ? 200 : 240,
             }}>

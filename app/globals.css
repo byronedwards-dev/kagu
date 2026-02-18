@@ -9,4 +9,5 @@
 body {
   margin: 0;
   background: #111114;
+  transition: background-color .2s;
 }

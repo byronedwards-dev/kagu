@@ -82,7 +82,13 @@ export default function CharEditor({ content, loading, onManual, onAI, onGenOutl
   const showAgeWarning = brief?.age_range?.includes("2–3") || brief?.character_age?.match(/\b3\b/);
 
   return <div>
-    <h2 style={{ fontSize: 22, fontWeight: 700, color: T.text, margin: "0 0 16px" }}>Character Descriptions</h2>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
+      <h2 style={{ fontSize: 22, fontWeight: 700, color: T.text, margin: 0 }}>Character Descriptions</h2>
+      <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+        {onGenOutline && <Btn small onClick={onGenOutline}>Generate Outline →</Btn>}
+        {onViewOutline && <Btn small ghost onClick={onViewOutline}>View Outline →</Btn>}
+      </div>
+    </div>
     {showAgeWarning && <div style={{ background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.25)", borderRadius: 10, padding: "10px 14px", margin: "0 0 10px", fontSize: 13, color: T.amber }}>Characters will be drawn 1-2 years younger than the selected age to compensate for AI making children look older.</div>}
     {warnings.map((w, i) => <div key={i} style={{ background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.25)", borderRadius: 10, padding: "10px 14px", margin: "0 0 10px", fontSize: 13, color: T.amber }}>⚠ {w}</div>)}
     {activeRules}
@@ -106,9 +112,5 @@ export default function CharEditor({ content, loading, onManual, onAI, onGenOutl
     )}
 
     <AIBar onSubmit={onAI} placeholder="e.g., Add freckles, make puppy fluffier..." />
-    <div style={{ marginTop: 16, display: "flex", gap: 8 }}>
-      {onGenOutline && <Btn onClick={onGenOutline}>Generate Outline →</Btn>}
-      {onViewOutline && <Btn ghost onClick={onViewOutline}>View Outline →</Btn>}
-    </div>
   </div>;
 }

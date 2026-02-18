@@ -44,7 +44,13 @@ export default function ConceptCards({ concepts, loading, onSelect, onRegen, cha
   }
 
   return <div>
-    <h2 style={{ fontSize: 22, fontWeight: 700, color: T.text, margin: "0 0 20px" }}>Story Concepts</h2>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
+      <h2 style={{ fontSize: 22, fontWeight: 700, color: T.text, margin: 0 }}>Story Concepts</h2>
+      <button onClick={() => onRegen("")} style={{ background: "none", border: `1px solid ${T.border}`, borderRadius: 6, padding: "4px 12px", color: T.textDim, fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}
+        onMouseEnter={e => { e.target.style.borderColor = T.accent; e.target.style.color = T.accent; }}
+        onMouseLeave={e => { e.target.style.borderColor = T.border; e.target.style.color = T.textDim; }}
+      >↻ Regenerate</button>
+    </div>
     <div style={{ display: "grid", gap: 10 }}>
       {concepts.map((c, i) => <div key={i} onClick={() => { setSel(i); setEd({ ...c }); }}
         style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 12, padding: 18, cursor: "pointer", transition: "all .15s" }}
@@ -55,9 +61,6 @@ export default function ConceptCards({ concepts, loading, onSelect, onRegen, cha
         <p style={{ fontSize: 14, color: T.textSoft, lineHeight: 1.6, margin: "0 0 8px" }}>{c.premise}</p>
         {c.key_moments && <div style={{ fontSize: 12, color: T.textDim, lineHeight: 1.5, whiteSpace: "pre-wrap" }}>{c.key_moments}</div>}
       </div>)}
-    </div>
-    <div style={{ marginTop: 12, display: "flex", gap: 12 }}>
-      <button onClick={() => onRegen("")} style={{ background: "none", border: "none", color: T.textDim, fontSize: 12, cursor: "pointer", fontFamily: "inherit" }}>↻ Regenerate</button>
     </div>
   </div>;
 }

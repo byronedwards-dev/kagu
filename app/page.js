@@ -3,7 +3,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import "./globals.css";
 import { callClaude, CLAUDE_MODELS } from "@/lib/api";
 import { storage } from "@/lib/storage";
-import { T, STEPS, parseJSON, generatePageFormats } from "@/lib/constants";
+import { T, STEPS, parseJSON, generatePageFormats, getThemeMode, setThemeMode, onThemeChange, initTheme } from "@/lib/constants";
 import { loadRules, saveRules, assembleSystemPrompt, getChecklistForStep } from "@/lib/rules";
 import KaguLogo from "@/components/ui/KaguLogo";
 import NavSteps from "@/components/ui/NavSteps";
@@ -23,6 +23,19 @@ import SessionsModal from "@/components/SessionsModal";
 import ActiveRules from "@/components/ui/ActiveRules";
 
 export default function App() {
+  // ─── Theme ───
+  const [theme, setTheme] = useState("dark");
+  useEffect(() => {
+    initTheme();
+    setTheme(getThemeMode());
+    return onThemeChange(m => setTheme(m));
+  }, []);
+  const toggleTheme = () => {
+    const next = theme === "dark" ? "light" : "dark";
+    setThemeMode(next);
+    localStorage.setItem("kagu-theme", next);
+  };
+
   // ─── Core state ───
   const [step, setStep] = useState("brief");
   const [done, setDone] = useState(new Set());
@@ -556,6 +569,8 @@ export default function App() {
               onMouseEnter={e => e.target.style.color = T.accent} onMouseLeave={e => e.target.style.color = T.textDim}>📚 Templates</button>
             <button onClick={() => setSettingsOpen(true)} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 8, padding: "8px 14px", fontSize: 13, cursor: "pointer", color: T.textDim, fontFamily: "inherit" }}
               onMouseEnter={e => e.target.style.color = T.accent} onMouseLeave={e => e.target.style.color = T.textDim}>⚙ Settings</button>
+            <button onClick={toggleTheme} title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 8, padding: "8px 12px", fontSize: 15, cursor: "pointer", color: T.textDim, fontFamily: "inherit", lineHeight: 1 }}
+              onMouseEnter={e => e.target.style.color = T.accent} onMouseLeave={e => e.target.style.color = T.textDim}>{theme === "dark" ? "☀" : "🌙"}</button>
           </div>
         </div>
 
