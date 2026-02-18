@@ -270,6 +270,28 @@ export default function App() {
     setLoading(false);
   };
 
+  // Re-inject updated character descriptions into existing prompts (lightweight AI swap)
+  const reinjectChars = async () => {
+    if (!prompts.length || !chars.trim()) return;
+    setErr(null); setLoading(true); cancelledRef.current = false;
+    const updated = [];
+    try {
+      for (let b = 0; b < prompts.length; b += 5) {
+        if (cancelledRef.current) break;
+        const batch = prompts.slice(b, b + 5);
+        const batchText = batch.map((p, i) => `[Page ${b + i + 1}]\n${p.prompt}`).join("\n\n---\n\n");
+        const r = await api([{ role: "user", content: `NEW CHARACTER DESCRIPTIONS:\n${chars}\n\nEXISTING PROMPTS:\n${batchText}\n\nReplace ALL character description sections in each prompt with the NEW descriptions above. Keep everything else IDENTICAL — same scene, composition, camera angle, lighting, format, aspect ratio. Only swap the character appearance details.\n\nReturn ONLY raw JSON array of ${batch.length} objects: [{"page_number": N, "format": "...", "prompt": "..."}]` }], "prompts");
+        if (cancelledRef.current) break;
+        updated.push(...parseJSON(r));
+      }
+      if (!cancelledRef.current) {
+        setPrompts(updated);
+        setDirtyPages(Array.from({ length: prompts.length }, (_, i) => i));
+      }
+    } catch (e) { if (e.name !== "AbortError") setErr(e.message); }
+    setLoading(false);
+  };
+
   const genOutline = async () => {
     setErr(null); setLoading(true); cancelledRef.current = false; go("outline"); mark("characters");
     setOutline([]);
@@ -507,7 +529,8 @@ export default function App() {
         return <ConceptCards concepts={concepts} loading={loading} onSelect={pickConcept} onRegen={genConcepts} characterSetup={brief.character_setup} />;
       case "characters":
         return <CharEditor content={chars} loading={loading} onManual={setChars} onAI={aiEditChars}
-          onGenOutline={genOutline} onViewOutline={outline.length ? () => go("outline") : null} brief={brief} activeRules={activeRulesEl} />;
+          onGenOutline={genOutline} onViewOutline={outline.length ? () => go("outline") : null}
+          onReinject={prompts.length > 0 ? reinjectChars : null} brief={brief} activeRules={activeRulesEl} />;
       case "outline":
         return <OutlineCards outline={outline} loading={loading} lidx={lidx} onAI={aiEditOutline} onSave={manualOutline}
           onRegenOutline={genOutline} text={text} onGenText={genText} onViewText={() => go("text")}

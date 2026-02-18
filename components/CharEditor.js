@@ -56,7 +56,7 @@ function joinCharBlocks(blocks) {
   return blocks.map(b => b.text).join("\n\n");
 }
 
-export default function CharEditor({ content, loading, onManual, onAI, onGenOutline, onViewOutline, brief, activeRules }) {
+export default function CharEditor({ content, loading, onManual, onAI, onGenOutline, onViewOutline, onReinject, brief, activeRules }) {
   const blocks = splitCharBlocks(content);
   const multiBlock = blocks.length > 1;
 
@@ -85,7 +85,8 @@ export default function CharEditor({ content, loading, onManual, onAI, onGenOutl
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
       <h2 style={{ fontSize: 22, fontWeight: 700, color: T.text, margin: 0 }}>Character Descriptions</h2>
       <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
-        {onGenOutline && <Btn small onClick={onGenOutline}>Generate Outline →</Btn>}
+        {onReinject && <Btn small onClick={onReinject} disabled={loading}>Re-inject into Prompts</Btn>}
+        {onGenOutline && <Btn small onClick={onGenOutline} disabled={loading}>Generate Outline →</Btn>}
         {onViewOutline && <Btn small ghost onClick={onViewOutline}>View Outline →</Btn>}
       </div>
     </div>
