@@ -484,7 +484,7 @@ export default function App() {
   /* ═══════════════════════════════════════
      VIEW ROUTER
      ═══════════════════════════════════════ */
-  const activeRulesEl = <ActiveRules step={step} rules={rules} hasCompanion={hasCompanion} />;
+  const activeRulesEl = <ActiveRules step={step} rules={rules} hasCompanion={hasCompanion} onRulesChange={setRules} />;
 
   const view = () => {
     switch (step) {

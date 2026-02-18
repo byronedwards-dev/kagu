@@ -54,15 +54,19 @@ export default function OutlineCards({ outline, loading, lidx, onAI, onSave, onR
         <p style={{ fontSize: 14, color: T.textSoft, margin: "0 0 6px" }}>{outline.length || "—"} images · Click text to edit</p>
         {brief && setBrief && <InlinePillEditor label="Text Density" value={brief.text_density} onChange={v => setBrief(p => ({ ...p, text_density: v }))} options={TEXT_DENSITIES} />}
       </div>
-      {!loading && outline.length > 0 && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", flexShrink: 0 }}>
+      {outline.length > 0 && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", flexShrink: 0 }}>
         {text.length > 0
           ? <Btn small onClick={onViewText}>View Text →</Btn>
-          : <Btn small onClick={onGenText}>Generate Text →</Btn>
+          : <Btn small onClick={onGenText} disabled={loading}>Generate Text →</Btn>
         }
-        <Btn small ghost onClick={onRegenOutline}>↻ Regen Outline</Btn>
+        <Btn small ghost onClick={onRegenOutline} disabled={loading}>↻ Regen Outline</Btn>
       </div>}
     </div>
     {activeRules}
+    {!loading && outline.length > 0 && qualityChecklist?.length > 0 && <QualityCheck
+      checklistItems={qualityChecklist}
+      buildContext={() => `BRIEF:\n${briefStr}\n\nOUTLINE:\n${outline.map((p, i) => `${i + 1}. [${p.format}] ${p.title_short} — ${p.description}${p.image_only ? " (IMAGE ONLY)" : ""}`).join("\n")}`}
+    />}
     <div style={{ display: "grid", gap: 6 }}>
       {outline.map((p, i) => {
         const pageName = pageFormats ? (pageFormats[i]?.name || "") : imgName(i);
@@ -78,9 +82,5 @@ export default function OutlineCards({ outline, loading, lidx, onAI, onSave, onR
       onMouseLeave={e => { e.target.style.borderColor = T.border; e.target.style.color = T.textDim; }}
     >+ Add Page</button>}
     {loading && <Loader text="Generating..." />}
-    {!loading && outline.length > 0 && qualityChecklist?.length > 0 && <QualityCheck
-      checklistItems={qualityChecklist}
-      buildContext={() => `BRIEF:\n${briefStr}\n\nOUTLINE:\n${outline.map((p, i) => `${i + 1}. [${p.format}] ${p.title_short} — ${p.description}${p.image_only ? " (IMAGE ONLY)" : ""}`).join("\n")}`}
-    />}
   </div>;
 }

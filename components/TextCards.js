@@ -72,21 +72,16 @@ export default function TextCards({ text, outline, loading, lidx, onAI, onSave, 
         <p style={{ fontSize: 14, color: T.textSoft, margin: "0 0 6px" }}>{totalWords} words total · Click to edit text or scene</p>
         {brief && setBrief && <InlinePillEditor label="Language" value={brief.language_style} onChange={v => setBrief(p => ({ ...p, language_style: v }))} options={LANGUAGE_STYLES} />}
       </div>
-      {!loading && text.length > 0 && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", flexShrink: 0 }}>
+      {text.length > 0 && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", flexShrink: 0 }}>
         {prompts.length > 0
           ? <Btn small onClick={onViewPrompts}>View Prompts →</Btn>
-          : <Btn small onClick={onGenPrompts}>Gen Prompts →</Btn>
+          : <Btn small onClick={onGenPrompts} disabled={loading}>Gen Prompts →</Btn>
         }
-        <Btn small ghost onClick={onRegenText}>↻ Regen Copy</Btn>
-        <Btn small ghost onClick={onRegenOutline}>↻ Regen Scene</Btn>
+        <Btn small ghost onClick={onRegenText} disabled={loading}>↻ Regen Copy</Btn>
+        <Btn small ghost onClick={onRegenOutline} disabled={loading}>↻ Regen Scene</Btn>
       </div>}
     </div>
     {activeRules}
-    {textStale && <StaleWarning msg="Outline has changed since this text was generated. Consider regenerating." />}
-    <div style={{ display: "grid", gap: 6 }}>
-      {text.map((p, i) => <TCard key={i} page={p} op={outline?.[i]} idx={i} lidx={lidx} onAI={onAI} onSave={onSave} onSaveScene={onSaveScene} charNames={charNames} pageFormats={pageFormats} />)}
-    </div>
-    {loading && <Loader text="Generating next batch" />}
     {!loading && text.length > 0 && qualityChecklist?.length > 0 && <QualityCheck
       checklistItems={qualityChecklist}
       buildContext={() => {
@@ -95,5 +90,10 @@ export default function TextCards({ text, outline, loading, lidx, onAI, onSave, 
         return `BRIEF:\n${briefStr}\n\nOUTLINE:\n${outlineText}\n\nSTORY TEXT:\n${storyText}`;
       }}
     />}
+    {textStale && <StaleWarning msg="Outline has changed since this text was generated. Consider regenerating." />}
+    <div style={{ display: "grid", gap: 6 }}>
+      {text.map((p, i) => <TCard key={i} page={p} op={outline?.[i]} idx={i} lidx={lidx} onAI={onAI} onSave={onSave} onSaveScene={onSaveScene} charNames={charNames} pageFormats={pageFormats} />)}
+    </div>
+    {loading && <Loader text="Generating next batch" />}
   </div>;
 }

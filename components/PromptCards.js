@@ -89,18 +89,12 @@ export default function PromptCards({ prompts, loading, lidx, onAI, onRegenOne, 
         <p style={{ fontSize: 14, color: T.textSoft, margin: "0 0 6px" }}>Click prompt to edit · AI bar for instructions · ↻ regenerates from text</p>
         {brief && setBrief && <InlinePillEditor label="Style" value={brief.illustration_style} onChange={v => setBrief(p => ({ ...p, illustration_style: v }))} options={ILLUSTRATION_STYLES} />}
       </div>
-      {!loading && prompts.length > 0 && <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
-        <Btn small onClick={onGoImages}>Generate Images →</Btn>
-        <Btn small ghost onClick={onGenPrompts}>↻ Regen All</Btn>
+      {prompts.length > 0 && <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+        <Btn small onClick={onGoImages} disabled={loading}>Generate Images →</Btn>
+        <Btn small ghost onClick={onGenPrompts} disabled={loading}>↻ Regen All</Btn>
       </div>}
     </div>
     {activeRules}
-    {promptsStale && <StaleWarning msg="Text has changed since these prompts were generated. Consider regenerating." />}
-    <div style={{ display: "grid", gap: 6 }}>
-      {prompts.map((p, i) => <PCard key={i} prompt={p} idx={i} lidx={lidx} onAI={onAI} onRegenOne={onRegenOne}
-        onSave={onSave} bannedWords={bannedWords} chars={chars} pageFormats={pageFormats} />)}
-    </div>
-    {loading && <Loader text="Generating next batch" />}
     {!loading && prompts.length > 0 && qualityChecklist?.length > 0 && <QualityCheck
       checklistItems={qualityChecklist}
       buildContext={() => {
@@ -112,5 +106,11 @@ export default function PromptCards({ prompts, loading, lidx, onAI, onRegenOne, 
       result={consistencyResult} loading={consistencyLoading}
       onRun={onRunConsistency} onApply={onApplyConsistency} onDiscard={onDiscardConsistency}
     />}
+    {promptsStale && <StaleWarning msg="Text has changed since these prompts were generated. Consider regenerating." />}
+    <div style={{ display: "grid", gap: 6 }}>
+      {prompts.map((p, i) => <PCard key={i} prompt={p} idx={i} lidx={lidx} onAI={onAI} onRegenOne={onRegenOne}
+        onSave={onSave} bannedWords={bannedWords} chars={chars} pageFormats={pageFormats} />)}
+    </div>
+    {loading && <Loader text="Generating next batch" />}
   </div>;
 }
