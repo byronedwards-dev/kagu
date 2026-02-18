@@ -8,6 +8,7 @@ import AIBar from "./ui/AIBar";
 import Loader from "./ui/Loader";
 import PageHdr from "./ui/PageHdr";
 import StaleWarning from "./ui/StaleWarning";
+import QualityCheck from "./ui/QualityCheck";
 
 // Check if prompt contains any indication of the expected aspect ratio
 function hasAspectHint(prompt, idx) {
@@ -77,7 +78,7 @@ function PCard({ prompt, idx, lidx, onAI, onRegenOne, onSave, bannedWords, chars
   </div>;
 }
 
-export default function PromptCards({ prompts, loading, lidx, onAI, onRegenOne, onSave, promptsStale, onGenPrompts, onGoImages, bannedWords, chars }) {
+export default function PromptCards({ prompts, loading, lidx, onAI, onRegenOne, onSave, promptsStale, onGenPrompts, onGoImages, bannedWords, chars, qualityChecklist, briefStr }) {
   if (loading && !prompts.length) return <><h2 style={{ fontSize: 22, fontWeight: 700, color: T.text }}>Image Prompts</h2><Loader text="Generating prompts" /></>;
   return <div>
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
@@ -96,5 +97,12 @@ export default function PromptCards({ prompts, loading, lidx, onAI, onRegenOne, 
         onSave={onSave} bannedWords={bannedWords} chars={chars} />)}
     </div>
     {loading && <Loader text="Generating next batch" />}
+    {!loading && prompts.length > 0 && qualityChecklist?.length > 0 && <QualityCheck
+      checklistItems={qualityChecklist}
+      buildContext={() => {
+        const promptsText = prompts.map((p, i) => `Page ${i + 1}:\n${p.prompt}`).join("\n\n");
+        return `BRIEF:\n${briefStr}\n\nCHARACTER DESCRIPTIONS:\n${chars}\n\nIMAGE PROMPTS:\n${promptsText}`;
+      }}
+    />}
   </div>;
 }

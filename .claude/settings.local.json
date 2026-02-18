@@ -26,7 +26,10 @@
       "Bash(cmd /c \"taskkill /F /IM node.exe 2>nul\")",
       "WebFetch(domain:raw.githubusercontent.com)",
       "WebFetch(domain:api.github.com)",
-      "WebFetch(domain:docs.imagine.art)"
+      "WebFetch(domain:docs.imagine.art)",
+      "Bash(npm run build:*)",
+      "WebFetch(domain:ai.google.dev)",
+      "WebFetch(domain:wavespeed.ai)"
     ]
   }
 }

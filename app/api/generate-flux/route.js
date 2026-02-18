@@ -3,7 +3,7 @@
 // Body: { prompt, width?, height?, model? }
 //
 // Flux API is async: submit → poll → return image URL
-// Models: "flux-2-pro" (default), "flux-2-max", "flux-pro-1.1", "flux-max"
+// Models: "flux-2-pro" (default), "flux-2-max", "flux-pro-1.1", "flux-max", "flux-2-klein-9b"
 
 const BFL_BASE = "https://api.bfl.ai/v1";
 

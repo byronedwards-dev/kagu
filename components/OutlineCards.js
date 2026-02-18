@@ -7,6 +7,7 @@ import Pill from "./ui/Pill";
 import AIBar from "./ui/AIBar";
 import Loader from "./ui/Loader";
 import PageHdr from "./ui/PageHdr";
+import QualityCheck from "./ui/QualityCheck";
 
 function OCard({ page, idx, lidx, onAI, onSave }) {
   const [ed, setEd] = useState(false);
@@ -25,7 +26,7 @@ function OCard({ page, idx, lidx, onAI, onSave }) {
   </div>;
 }
 
-export default function OutlineCards({ outline, loading, lidx, onAI, onSave, onRegenOutline, text, onGenText, onViewText }) {
+export default function OutlineCards({ outline, loading, lidx, onAI, onSave, onRegenOutline, text, onGenText, onViewText, qualityChecklist, briefStr }) {
   if (loading && !outline.length) return <><h2 style={{ fontSize: 22, fontWeight: 700, color: T.text }}>Page Outline</h2><Loader text="Building outline (batch 1/2)" /></>;
   return <div>
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
@@ -45,5 +46,9 @@ export default function OutlineCards({ outline, loading, lidx, onAI, onSave, onR
       {outline.map((p, i) => <OCard key={i} page={p} idx={i} lidx={lidx} onAI={onAI} onSave={onSave} />)}
     </div>
     {loading && <Loader text="Generating batch 2/2" />}
+    {!loading && outline.length > 0 && qualityChecklist?.length > 0 && <QualityCheck
+      checklistItems={qualityChecklist}
+      buildContext={() => `BRIEF:\n${briefStr}\n\nOUTLINE:\n${outline.map((p, i) => `${i + 1}. [${p.format}] ${p.title_short} — ${p.description}${p.image_only ? " (IMAGE ONLY)" : ""}`).join("\n")}`}
+    />}
   </div>;
 }

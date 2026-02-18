@@ -4,7 +4,7 @@ import "./globals.css";
 import { callClaude } from "@/lib/api";
 import { storage } from "@/lib/storage";
 import { T, STEPS, parseJSON } from "@/lib/constants";
-import { loadRules, saveRules, assembleSystemPrompt } from "@/lib/rules";
+import { loadRules, saveRules, assembleSystemPrompt, getChecklistForStep } from "@/lib/rules";
 import KaguLogo from "@/components/ui/KaguLogo";
 import NavSteps from "@/components/ui/NavSteps";
 import Btn from "@/components/ui/Btn";
@@ -349,16 +349,19 @@ export default function App() {
           onGenOutline={genOutline} onViewOutline={outline.length ? () => go("outline") : null} />;
       case "outline":
         return <OutlineCards outline={outline} loading={loading} lidx={lidx} onAI={aiEditOutline} onSave={manualOutline}
-          onRegenOutline={genOutline} text={text} onGenText={genText} onViewText={() => go("text")} />;
+          onRegenOutline={genOutline} text={text} onGenText={genText} onViewText={() => go("text")}
+          qualityChecklist={getChecklistForStep("outline", rules.qualityChecklist, hasCompanion)} briefStr={briefStr()} />;
       case "text":
         return <TextCards text={text} outline={outline} loading={loading} lidx={lidx} onAI={aiEditText} onSave={manualText}
           onSaveScene={manualOutline} onRegenOutline={genOutline} textStale={textStale} prompts={prompts} onGenPrompts={genPrompts} onViewPrompts={() => go("prompts")}
-          onRegenText={genText} charNames={charNames} />;
+          onRegenText={genText} charNames={charNames}
+          qualityChecklist={getChecklistForStep("text", rules.qualityChecklist, hasCompanion)} briefStr={briefStr()} />;
       case "prompts":
         return <PromptCards prompts={prompts} loading={loading} lidx={lidx} onAI={editPrompt} onRegenOne={regenOnePrompt}
           onSave={manualPrompt} promptsStale={promptsStale} onGenPrompts={genPrompts}
           onGoImages={() => { mark("prompts"); go("images"); }}
-          bannedWords={rules.bannedWords} chars={chars} />;
+          bannedWords={rules.bannedWords} chars={chars}
+          qualityChecklist={getChecklistForStep("prompts", rules.qualityChecklist, hasCompanion)} briefStr={briefStr()} />;
       case "images":
         return <div>
           <ImagesStep prompts={prompts} images={images} setImages={setImages} outline={outline}
@@ -370,8 +373,7 @@ export default function App() {
         </div>;
       case "export":
         return <ExportView
-          data={{ brief, characters: chars, selectedConcept: selConcept, outline, storyText: text, imagePrompts: prompts, images }}
-          qualityChecklist={rules.qualityChecklist} />;
+          data={{ brief, characters: chars, selectedConcept: selConcept, outline, storyText: text, imagePrompts: prompts, images }} />;
     }
   };
 

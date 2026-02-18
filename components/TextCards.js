@@ -9,6 +9,7 @@ import AIBar from "./ui/AIBar";
 import Loader from "./ui/Loader";
 import PageHdr from "./ui/PageHdr";
 import StaleWarning from "./ui/StaleWarning";
+import QualityCheck from "./ui/QualityCheck";
 
 function TCard({ page, op, idx, lidx, onAI, onSave, onSaveScene, charNames }) {
   const [ed, setEd] = useState(false);
@@ -58,7 +59,7 @@ function TCard({ page, op, idx, lidx, onAI, onSave, onSaveScene, charNames }) {
   </div>;
 }
 
-export default function TextCards({ text, outline, loading, lidx, onAI, onSave, onSaveScene, onRegenOutline, textStale, prompts, onGenPrompts, onViewPrompts, onRegenText, charNames }) {
+export default function TextCards({ text, outline, loading, lidx, onAI, onSave, onSaveScene, onRegenOutline, textStale, prompts, onGenPrompts, onViewPrompts, onRegenText, charNames, qualityChecklist, briefStr }) {
   // Total word count
   const totalWords = text.reduce((sum, p) => sum + (p.text || "").split(/\s+/).filter(Boolean).length, 0);
 
@@ -83,5 +84,13 @@ export default function TextCards({ text, outline, loading, lidx, onAI, onSave, 
       {text.map((p, i) => <TCard key={i} page={p} op={outline?.[i]} idx={i} lidx={lidx} onAI={onAI} onSave={onSave} onSaveScene={onSaveScene} charNames={charNames} />)}
     </div>
     {loading && <Loader text="Generating next batch" />}
+    {!loading && text.length > 0 && qualityChecklist?.length > 0 && <QualityCheck
+      checklistItems={qualityChecklist}
+      buildContext={() => {
+        const storyText = text.map((p, i) => `Page ${i + 1}: ${p.image_only ? "(image only)" : p.text || "(empty)"}`).join("\n");
+        const outlineText = outline.map((p, i) => `${i + 1}. ${p.title_short} — ${p.description}`).join("\n");
+        return `BRIEF:\n${briefStr}\n\nOUTLINE:\n${outlineText}\n\nSTORY TEXT:\n${storyText}`;
+      }}
+    />}
   </div>;
 }
