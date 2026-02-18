@@ -463,6 +463,8 @@ export default function App() {
     setErr(null); setLoading(true); cancelledRef.current = false; go("prompts"); mark("text");
     setPrompts([]); setConsistencyResult(null);
     const BATCH = 6; // pages per batch
+    const style = brief.illustration_style || "IMAX, ultra hyper film still, cinematic";
+    const stylePrefix = `Children's book illustration, ${style}. `;
     const batches = [];
     for (let b = 0; b < outline.length; b += BATCH) {
       batches.push({ start: b, end: Math.min(b + BATCH, outline.length) });
@@ -472,10 +474,13 @@ export default function App() {
       const results = await Promise.all(batches.map(({ start, end }) => {
         const bo = outline.slice(start, end), bt = text.slice(start, end);
         const combined = bo.map((p, i) => ({ ...p, story_text: bt[i]?.text }));
-        return api([{ role: "user", content: `BRIEF:\n${briefStr()}\nCHARACTERS (verbatim every prompt):\n${chars}\nSTYLE: ${brief.illustration_style || "IMAX, ultra hyper film still, cinematic"}\n\nPrompts for:\n${JSON.stringify(combined)}\n\nEach: page#/style/ratio, ONE scene, full chars redescribed, spreads="one panoramic image" (NEVER left/right/center/seam), chars SMALL in wide scene, facial expressions, nothing in center.\nONLY raw JSON array of ${bo.length}: "page_number","format","prompt".` }], "prompts");
+        return api([{ role: "user", content: `BRIEF:\n${briefStr()}\nCHARACTERS (verbatim every prompt):\n${chars}\nSTYLE: ${style}\n\nPrompts for:\n${JSON.stringify(combined)}\n\nDo NOT include art style keywords at the start of prompts — a style prefix will be added automatically.\nEach: page#/ratio, ONE scene, full chars redescribed, spreads="one panoramic image" (NEVER left/right/center/seam), chars SMALL in wide scene, facial expressions, nothing in center.\nONLY raw JSON array of ${bo.length}: "page_number","format","prompt".` }], "prompts");
       }));
       if (!cancelledRef.current) {
-        const all = results.flatMap(r => parseJSON(r));
+        // Prepend identical style prefix to every prompt
+        const all = results.flatMap(r => parseJSON(r)).map(p => ({
+          ...p, prompt: p.prompt?.startsWith(stylePrefix) ? p.prompt : stylePrefix + p.prompt,
+        }));
         setPrompts(all);
         setPromptsStale(false); setDirtyPages([]);
       }
@@ -485,10 +490,14 @@ export default function App() {
 
   const editPrompt = async (i, inst) => {
     setErr(null); setLidx(i);
+    const style = brief.illustration_style || "IMAX, ultra hyper film still, cinematic";
+    const stylePrefix = `Children's book illustration, ${style}. `;
     try {
       const combined = { ...outline[i], story_text: text[i]?.text };
-      const r = await api([{ role: "user", content: `BRIEF:\n${briefStr()}\nCHARACTERS (verbatim every prompt):\n${chars}\nSTYLE: ${brief.illustration_style || "IMAX, ultra hyper film still, cinematic"}\nSCENE+TEXT:\n${JSON.stringify(combined)}\n\nCurrent prompt:\n${JSON.stringify(prompts[i])}\n\nChange: "${inst}"\nEach: page#/style/ratio, ONE scene, full chars redescribed, spreads="one panoramic image" (NEVER left/right/center/seam), chars SMALL in wide scene, facial expressions, nothing in center.\nONLY raw JSON: page_number,format,prompt.` }], "prompts");
-      setPrompts(p => p.map((x, j) => j === i ? parseJSON(r) : x));
+      const r = await api([{ role: "user", content: `BRIEF:\n${briefStr()}\nCHARACTERS (verbatim every prompt):\n${chars}\nSTYLE: ${style}\nSCENE+TEXT:\n${JSON.stringify(combined)}\n\nCurrent prompt:\n${JSON.stringify(prompts[i])}\n\nChange: "${inst}"\nDo NOT include art style keywords at the start — a style prefix is added automatically.\nEach: page#/ratio, ONE scene, full chars redescribed, spreads="one panoramic image" (NEVER left/right/center/seam), chars SMALL in wide scene, facial expressions, nothing in center.\nONLY raw JSON: page_number,format,prompt.` }], "prompts");
+      const parsed = parseJSON(r);
+      const fixed = { ...parsed, prompt: parsed.prompt?.startsWith(stylePrefix) ? parsed.prompt : stylePrefix + parsed.prompt };
+      setPrompts(p => p.map((x, j) => j === i ? fixed : x));
       setDirtyPages(p => p.includes(i) ? p : [...p, i]);
     } catch (e) { if (e.name !== "AbortError") setErr(e.message); }
     setLidx(null);
@@ -496,10 +505,14 @@ export default function App() {
 
   const regenOnePrompt = async (i) => {
     setErr(null); setLidx(i);
+    const style = brief.illustration_style || "IMAX, ultra hyper film still, cinematic";
+    const stylePrefix = `Children's book illustration, ${style}. `;
     try {
       const combined = { ...outline[i], story_text: text[i]?.text };
-      const r = await api([{ role: "user", content: `BRIEF:\n${briefStr()}\nCHARACTERS (verbatim every prompt):\n${chars}\nSTYLE: ${brief.illustration_style || "IMAX, ultra hyper film still, cinematic"}\n\nGenerate prompt for:\n${JSON.stringify(combined)}\n\nEach: page#/style/ratio, ONE scene, full chars redescribed, spreads="one panoramic image" (NEVER left/right/center/seam), chars SMALL in wide scene, facial expressions, nothing in center.\nONLY raw JSON: page_number,format,prompt.` }], "prompts");
-      setPrompts(p => p.map((x, j) => j === i ? parseJSON(r) : x));
+      const r = await api([{ role: "user", content: `BRIEF:\n${briefStr()}\nCHARACTERS (verbatim every prompt):\n${chars}\nSTYLE: ${style}\n\nGenerate prompt for:\n${JSON.stringify(combined)}\n\nDo NOT include art style keywords at the start — a style prefix is added automatically.\nEach: page#/ratio, ONE scene, full chars redescribed, spreads="one panoramic image" (NEVER left/right/center/seam), chars SMALL in wide scene, facial expressions, nothing in center.\nONLY raw JSON: page_number,format,prompt.` }], "prompts");
+      const parsed = parseJSON(r);
+      const fixed = { ...parsed, prompt: parsed.prompt?.startsWith(stylePrefix) ? parsed.prompt : stylePrefix + parsed.prompt };
+      setPrompts(p => p.map((x, j) => j === i ? fixed : x));
       setDirtyPages(p => p.includes(i) ? p : [...p, i]);
     } catch (e) { if (e.name !== "AbortError") setErr(e.message); }
     setLidx(null);
