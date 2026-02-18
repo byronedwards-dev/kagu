@@ -36,11 +36,11 @@ export async function POST(request) {
     });
 
     if (!submitRes.ok) {
-      const err = await submitRes.json().catch(() => ({}));
-      return Response.json(
-        { error: err.detail || err.message || `Flux submit failed (${submitRes.status})` },
-        { status: submitRes.status }
-      );
+      const errText = await submitRes.text().catch(() => "");
+      let errMsg = `Flux submit failed (${submitRes.status})`;
+      try { const e = JSON.parse(errText); errMsg = e.detail || e.message || errMsg; } catch {}
+      console.error(`[generate-flux] ${model} error:`, errText);
+      return Response.json({ error: errMsg }, { status: submitRes.status });
     }
 
     const { id } = await submitRes.json();
