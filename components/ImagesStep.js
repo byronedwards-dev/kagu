@@ -10,6 +10,7 @@ import ErrBox from "./ui/ErrBox";
 
 export default function ImagesStep({ prompts, images, setImages, outline, dirtyPages, settings, pageFormats }) {
   const [selectedModels, setSelectedModels] = useState(new Set([settings?.defaultModel || "flux-2-pro"]));
+  const [selectedPages, setSelectedPages] = useState(new Set());
   const [genErr, setGenErr] = useState(null);
   const [copied, setCopied] = useState(null);
   const [pending, setPending] = useState(false);
@@ -207,6 +208,19 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
   const genAll = () => generate(Array.from({ length: prompts.length }, (_, i) => i));
   const genDirty = () => generate(dirtyPages || []);
   const genSingle = (idx) => generate([idx]);
+  const genSelected = () => { const pages = [...selectedPages].sort((a, b) => a - b); generate(pages); setSelectedPages(new Set()); };
+
+  const togglePage = (idx) => {
+    setSelectedPages(prev => {
+      const next = new Set(prev);
+      if (next.has(idx)) next.delete(idx); else next.add(idx);
+      return next;
+    });
+  };
+  const selectAllPages = () => {
+    if (selectedPages.size === prompts.length) setSelectedPages(new Set());
+    else setSelectedPages(new Set(prompts.map((_, i) => i)));
+  };
 
   const stopGen = () => {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
@@ -261,8 +275,13 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
         </p>
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", flexShrink: 0 }}>
-        <Btn onClick={genAll} disabled={pending || !hasN8n} small>
-          ⚡ Generate All Pages
+        {selectedPages.size > 0 && (
+          <Btn onClick={genSelected} disabled={pending || !hasN8n} small>
+            ⚡ Generate Selected ({selectedPages.size})
+          </Btn>
+        )}
+        <Btn onClick={genAll} disabled={pending || !hasN8n} small ghost={selectedPages.size > 0}>
+          ⚡ All Pages
         </Btn>
         {dirtyPages?.length > 0 && (
           <Btn onClick={genDirty} disabled={pending || !hasN8n} small ghost>
@@ -336,6 +355,16 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
 
     {genErr && <ErrBox msg={genErr} onDismiss={() => setGenErr(null)} />}
 
+    {/* Select all toggle */}
+    {prompts.length > 1 && <div style={{ marginBottom: 8 }}>
+      <button onClick={selectAllPages} style={{
+        background: "none", border: "none", fontSize: 12, color: T.textDim,
+        cursor: "pointer", fontFamily: "inherit", padding: "2px 0",
+      }} onMouseEnter={e => e.target.style.color = T.accent} onMouseLeave={e => e.target.style.color = T.textDim}>
+        {selectedPages.size === prompts.length ? "Deselect all pages" : "Select all pages"}
+      </button>
+    </div>}
+
     {/* Per-page cards */}
     <div style={{ display: "grid", gap: 8 }}>
       {prompts.map((p, i) => {
@@ -350,6 +379,13 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
         }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+              <button onClick={() => togglePage(i)} style={{
+                width: 18, height: 18, borderRadius: 4, flexShrink: 0, cursor: "pointer",
+                background: selectedPages.has(i) ? T.accent : "transparent",
+                border: `1.5px solid ${selectedPages.has(i) ? T.accent : T.border}`,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                color: "#fff", fontSize: 12, fontWeight: 700, lineHeight: 1, padding: 0,
+              }}>{selectedPages.has(i) ? "✓" : ""}</button>
               <PageHdr idx={i} titleShort={outline?.[i]?.title_short} pageFormats={pageFormats} />
               {isDirty && <Pill color={T.amber}>Dirty</Pill>}
               {isPagePending && isPageDone && <Pill color={T.accent}>✓</Pill>}

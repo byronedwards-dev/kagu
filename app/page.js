@@ -541,7 +541,7 @@ export default function App() {
       <SettingsModal open={settingsOpen} onClose={() => setSettingsOpen(false)}
         rules={rules} onRulesChange={setRules} settings={settings} onSettingsChange={setSettings} />
       <SessionsModal open={sessionsOpen} onClose={() => setSessionsOpen(false)} getState={getState} loadState={loadStateData} />
-      <div style={{ maxWidth: 800, margin: "0 auto", padding: "36px 24px 80px" }}>
+      <div style={{ maxWidth: 960, margin: "0 auto", padding: "36px 24px 80px" }}>
         <div style={{ marginBottom: 28, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <KaguLogo size={72} />
@@ -560,7 +560,7 @@ export default function App() {
         </div>
 
         <NavSteps steps={STEPS} current={step} done={done} onNav={go} />
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: loading || err ? 0 : 16, marginTop: 4 }}>
+        {!["images", "preview", "export"].includes(step) && <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: loading || err ? 0 : 16, marginTop: 4 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
             <span style={{ fontSize: 11, color: T.textDim, textTransform: "uppercase", letterSpacing: 0.5 }}>AI Model:</span>
             {CLAUDE_MODELS.map(m => (
@@ -577,7 +577,7 @@ export default function App() {
             ))}
           </div>
           {loading && <Btn danger ghost small onClick={stopGen}>■ Stop</Btn>}
-        </div>
+        </div>}
         {err && <ErrBox msg={err} onDismiss={() => setErr(null)} />}
         {view()}
       </div>
