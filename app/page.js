@@ -586,20 +586,20 @@ export default function App() {
           onRunConsistency={runConsistencyPass} onApplyConsistency={applyConsistencyPass} onDiscardConsistency={discardConsistencyPass} />;
       case "images":
         return <div>
-          <ImagesStep prompts={prompts} images={images} setImages={setImages} outline={outline}
-            dirtyPages={dirtyPages} settings={settings} pageFormats={pageFormats} />
-          <div style={{ marginTop: 16, display: "flex", gap: 8 }}>
+          <div style={{ marginBottom: 16, display: "flex", gap: 8 }}>
             <Btn onClick={() => { mark("images"); go("preview"); }}>Preview Book →</Btn>
             <Btn ghost onClick={() => go("prompts")}>← Back to Prompts</Btn>
           </div>
+          <ImagesStep prompts={prompts} images={images} setImages={setImages} outline={outline}
+            dirtyPages={dirtyPages} settings={settings} pageFormats={pageFormats} />
         </div>;
       case "preview":
         return <div>
-          <BookPreview outline={outline} text={text} images={images} pageFormats={pageFormats} />
-          <div style={{ marginTop: 16, display: "flex", gap: 8 }}>
+          <div style={{ marginBottom: 16, display: "flex", gap: 8 }}>
             <Btn onClick={() => { mark("preview"); go("export"); }}>Go to Export →</Btn>
             <Btn ghost onClick={() => go("images")}>← Back to Images</Btn>
           </div>
+          <BookPreview outline={outline} text={text} images={images} pageFormats={pageFormats} />
         </div>;
       case "export":
         return <ExportView pageFormats={pageFormats}
