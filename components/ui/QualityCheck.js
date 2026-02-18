@@ -52,10 +52,18 @@ Exactly ${checklistItems.length} entries, one per checklist item in order.`;
   const passCount = results?.items?.filter(r => r.pass).length || 0;
   const total = results?.items?.length || 0;
 
-  return <div style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 10, padding: 14, marginTop: 16 }}>
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: results ? 10 : 0 }}>
-      <span style={{ fontSize: 13, fontWeight: 700, color: T.text }}>Quality Check</span>
-      <Btn small ghost onClick={run} disabled={loading}>
+  return <div style={{
+    background: `linear-gradient(135deg, rgba(139,124,247,0.06) 0%, rgba(139,124,247,0.02) 100%)`,
+    border: `1.5px solid rgba(139,124,247,0.2)`,
+    borderRadius: 12, padding: 16, marginBottom: 16,
+  }}>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: results ? 12 : 0 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <span style={{ fontSize: 15 }}>🔍</span>
+        <span style={{ fontSize: 13, fontWeight: 700, color: T.text }}>Quality Check</span>
+        <span style={{ fontSize: 11, color: T.textDim }}>({checklistItems.length} items)</span>
+      </div>
+      <Btn small onClick={run} disabled={loading}>
         {loading ? "Checking..." : results ? "Re-run" : "Run Check"}
       </Btn>
     </div>
