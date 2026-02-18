@@ -91,7 +91,7 @@ export default function PromptCards({ prompts, loading, lidx, onAI, onRegenOne, 
       </div>
       {prompts.length > 0 && <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
         <Btn small onClick={onGoImages} disabled={loading}>Go to Images →</Btn>
-        <Btn small ghost onClick={onGenPrompts} disabled={loading}>↻ Regen All</Btn>
+        <Btn small ghost onClick={onGenPrompts} disabled={loading}>↻ Regen Prompts</Btn>
       </div>}
     </div>
     {activeRules}
