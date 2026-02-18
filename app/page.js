@@ -1,9 +1,9 @@
 "use client";
 import { useState, useEffect, useRef, useCallback } from "react";
 import "./globals.css";
-import { callClaude } from "@/lib/api";
+import { callClaude, CLAUDE_MODELS } from "@/lib/api";
 import { storage } from "@/lib/storage";
-import { T, STEPS, parseJSON } from "@/lib/constants";
+import { T, STEPS, parseJSON, generatePageFormats } from "@/lib/constants";
 import { loadRules, saveRules, assembleSystemPrompt, getChecklistForStep } from "@/lib/rules";
 import KaguLogo from "@/components/ui/KaguLogo";
 import NavSteps from "@/components/ui/NavSteps";
@@ -20,6 +20,7 @@ import BookPreview from "@/components/BookPreview";
 import ExportView from "@/components/ExportView";
 import SettingsModal from "@/components/SettingsModal";
 import SessionsModal from "@/components/SessionsModal";
+import ActiveRules from "@/components/ui/ActiveRules";
 
 export default function App() {
   // ─── Core state ───
@@ -64,6 +65,10 @@ export default function App() {
   const [textStale, setTextStale] = useState(false);
   const [promptsStale, setPromptsStale] = useState(false);
 
+  // ─── Character consistency pass ───
+  const [consistencyResult, setConsistencyResult] = useState(null);
+  const [consistencyLoading, setConsistencyLoading] = useState(false);
+
   const abortRef = useRef(null);
   const cancelledRef = useRef(false);
 
@@ -78,13 +83,17 @@ export default function App() {
   };
 
   const hasCompanion = brief.character_setup?.includes("companion") || false;
+  const pageCount = parseInt(brief.page_count) || 22;
+  const pageFormats = generatePageFormats(pageCount);
+
+  const claudeModel = settings.claudeModel || "";
 
   const api = useCallback((msgs, stepName) => {
     const c = new AbortController();
     abortRef.current = c;
     const sysPrompt = assembleSystemPrompt(rules, stepName || step, { hasCompanion });
-    return callClaude(msgs, sysPrompt, c.signal);
-  }, [rules, step, hasCompanion]);
+    return callClaude(msgs, sysPrompt, c.signal, claudeModel || undefined);
+  }, [rules, step, hasCompanion, claudeModel]);
 
   const stopGen = () => { cancelledRef.current = true; if (abortRef.current) abortRef.current.abort(); setLoading(false); };
 
@@ -100,8 +109,8 @@ export default function App() {
   // ─── Auto-save ───
   const getState = useCallback(() => ({
     brief, concepts, selConcept, chars, outline, text, prompts, images, step, done: [...done], dirtyPages, rules,
-    outlineHash, textOutlineHash,
-  }), [brief, concepts, selConcept, chars, outline, text, prompts, images, step, done, dirtyPages, rules, outlineHash, textOutlineHash]);
+    outlineHash, textOutlineHash, consistencyResult,
+  }), [brief, concepts, selConcept, chars, outline, text, prompts, images, step, done, dirtyPages, rules, outlineHash, textOutlineHash, consistencyResult]);
 
   useEffect(() => {
     const t = setTimeout(async () => {
@@ -137,6 +146,7 @@ export default function App() {
     if (s.rules) setRules(s.rules);
     if (s.outlineHash) setOutlineHash(s.outlineHash);
     if (s.textOutlineHash) setTextOutlineHash(s.textOutlineHash);
+    if (s.consistencyResult !== undefined) setConsistencyResult(s.consistencyResult);
     setTextStale(false); setPromptsStale(false);
   };
 
@@ -155,10 +165,28 @@ export default function App() {
     // Clear all book data
     setBrief({}); setConcepts([]); setSelConcept(null); setChars("");
     setOutline([]); setText([]); setPrompts([]); setImages({}); setDirtyPages([]);
-    setDone(new Set()); setStep("brief");
+    setDone(new Set()); setStep("brief"); setConsistencyResult(null);
     setTextStale(false); setPromptsStale(false);
     setOutlineHash(""); setTextOutlineHash("");
     setErr(null); setLoading(false);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  // ─── Duplicate Book (for variants) ───
+  const duplicateBook = async () => {
+    const hasContent = selConcept || outline.length > 0 || text.length > 0;
+    if (!hasContent) return;
+    // Save original
+    const label = selConcept?.title || brief.theme || "Untitled";
+    const ts = new Date().toLocaleString("en-GB", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+    const key = "session:" + `${label} (${ts})`.toLowerCase().replace(/[^a-z0-9]/g, "-").slice(0, 60);
+    try { await storage.set(key, JSON.stringify({ name: `${label} (${ts})`, ts: Date.now(), state: getState() })); } catch {}
+    // Mark as variant — clear images so user regenerates after editing
+    setImages({});
+    setDirtyPages([]);
+    setConsistencyResult(null);
+    if (selConcept) setSelConcept(prev => ({ ...prev, title: (prev?.title || "") + " (Variant)" }));
+    setStep("characters");
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -197,13 +225,13 @@ export default function App() {
     setSelConcept(cleanConcept); setErr(null); setLoading(true); cancelledRef.current = false; go("characters"); mark("concepts");
 
     const trait = brief.character_trait ? ` Personality trait: ${brief.character_trait} — this should come through in body language and emotional baseline.` : "";
-    let charInstructions = `Child: describe 1-2 yrs YOUNGER than actual. Basic clothes. Include: height/build, skin tone, hair, eye color/shape, face details (nose, cheeks, lips, dimples/freckles), exact clothing with specific colors, body language, emotional baseline.${trait}`;
+    let charInstructions = `Child: describe 1-2 yrs YOUNGER than actual. Basic clothes. Include: height/build, skin tone, hair, eye color, simple proportional face (eye color + expression only — faces are swapped in post, don't over-detail), exact clothing with specific colors, body language, emotional baseline.${trait}`;
 
     if (hasCompanion) {
       const details = brief.sidekick_details ? ` Use these specifics: ${brief.sidekick_details}.` : "";
       charInstructions += `\n\nCompanion: exact breed+age+weight, fur details, max 2 accessories with exact placement, size relative to child.${details}`;
     } else if (hasTwoChildren) {
-      charInstructions += `\n\nSecond child: same level of detail as the first — height/build, skin tone, hair, eye color/shape, face details, clothing, body language, emotional baseline. Describe 1-2 yrs YOUNGER than actual.`;
+      charInstructions += `\n\nSecond child: same level of detail as the first — height/build, skin tone, hair, eye color, simple proportional face (eye color + expression only), clothing, body language, emotional baseline. Describe 1-2 yrs YOUNGER than actual.`;
     } else if (hasAdult) {
       charInstructions += `\n\nAdult (coach/parent/mentor): height/build, skin tone, hair, face details, clothing with specific colors, body language, relationship to child.`;
     }
@@ -224,7 +252,7 @@ export default function App() {
     setErr(null); setLoading(true);
     try {
       const r = await api([{ role: "user", content: `Current:\n\n${chars}\n\nAdjust: ${inst}\n\nReturn full updated block.` }], "characters");
-      setChars(r); setDirtyPages(Array.from({ length: 22 }, (_, i) => i));
+      setChars(r); setDirtyPages(Array.from({ length: pageCount }, (_, i) => i));
     } catch (e) { if (e.name !== "AbortError") setErr(e.message); }
     setLoading(false);
   };
@@ -235,11 +263,30 @@ export default function App() {
     const all = [];
     const density = brief.text_density || "";
     const densityNote = density ? `\nText density: ${density}. Adjust number of image-only pages accordingly.` : "";
+    const fmts = generatePageFormats(pageCount);
+
+    // Build page list string from dynamic formats
+    const buildPageList = (slice) => slice.map(f => {
+      let label = `- ${f.index + 1}: ${f.name} (${f.format})`;
+      if (f.index === 0) label += " — cover scene only, NO story text, image_only: true";
+      if (f.name === "Closing") label += " — this IS part of the story, emotional resolution";
+      if (f.name === "Back Cover") label += " — warm closing image";
+      return label;
+    }).join("\n");
+
+    // Split into 1 or 2 batches
+    const mid = pageCount <= 14 ? pageCount : Math.ceil(pageCount / 2);
+    const batch1Fmts = fmts.slice(0, mid);
+    const batch2Fmts = fmts.slice(mid);
+
     try {
-      const r1 = await api([{ role: "user", content: `BRIEF:\n${briefStr()}\nCONCEPT:\n${JSON.stringify(selConcept)}\nCHARACTERS:\n${chars}\n\nOutline for images 1-11 of 22:\n- 1: Cover (square)\n- 2: Inside left (square)\n- 3: Inside right (square)\n- 4-11: Spreads 1-8 (1:2)\n\nEach = ONE drawable scene. Include setting transitions. Mark image-only pages based on density.${densityNote}\nONLY raw JSON array of 11 objects: "page_number","format","title_short","setting","description","next_setting","image_only".` }], "outline");
+      const r1 = await api([{ role: "user", content: `BRIEF:\n${briefStr()}\nCONCEPT:\n${JSON.stringify(selConcept)}\nCHARACTERS:\n${chars}\n\nOutline for images 1-${mid} of ${pageCount}:\n${buildPageList(batch1Fmts)}\n\nPACING: Pages 1-2 are setup/intro only. Main action MUST begin by page 3-4. Story climax should resolve at least 2 pages before the end. Keep resolution brief (1-2 pages max, no extended endings).\n\nSTORY DIRECTION: Each page description MUST state its narrative purpose (setup, escalation, complication, climax, resolution). The direction of the story should be clear from reading the outline alone.\n\nEach = ONE drawable scene. Include setting transitions. Mark image-only pages based on density.${densityNote}\nONLY raw JSON array of ${mid} objects: "page_number","format","title_short","setting","description","next_setting","image_only".` }], "outline");
       if (cancelledRef.current) return; all.push(...parseJSON(r1)); setOutline([...all]);
-      const r2 = await api([{ role: "user", content: `First 11:\n${JSON.stringify(all)}\n\nNow images 12-22:\n- 12-20: Spreads 9-17 (1:2)\n- 21: Closing page (square) — this IS part of the story, emotional resolution\n- 22: Back cover (square) — warm closing image\n\nMore image-only pages as needed for the text density setting. Story resolves by 20-21.${densityNote}\nONLY raw JSON array of 11 objects. Same keys.` }], "outline");
-      if (cancelledRef.current) return; all.push(...parseJSON(r2)); setOutline([...all]);
+
+      if (batch2Fmts.length > 0) {
+        const r2 = await api([{ role: "user", content: `First ${mid}:\n${JSON.stringify(all)}\n\nNow images ${mid + 1}-${pageCount}:\n${buildPageList(batch2Fmts)}\n\nPACING: Story climax should resolve by page ${pageCount - 2} at latest. Pages ${pageCount - 1}-${pageCount} are resolution/closing ONLY — keep it brief (1-2 pages). No extended endings, no "what I learned" monologues, no dream sequences.\n\nMore image-only pages as needed for the text density setting.${densityNote}\nONLY raw JSON array of ${batch2Fmts.length} objects. Same keys.` }], "outline");
+        if (cancelledRef.current) return; all.push(...parseJSON(r2)); setOutline([...all]);
+      }
       setTextStale(false); setPromptsStale(false);
     } catch (e) { if (e.name !== "AbortError") setErr(e.message); }
     setLoading(false);
@@ -260,6 +307,76 @@ export default function App() {
     setDirtyPages(p => p.includes(i) ? p : [...p, i]);
   };
 
+  const deleteOutlinePage = (idx) => {
+    const fmts = generatePageFormats(outline.length);
+    const fixedNames = ["Cover", "Inside Left", "Inside Right", "Closing", "Back Cover"];
+    if (fixedNames.includes(fmts[idx]?.name)) return;
+    setOutline(prev => {
+      const arr = prev.filter((_, i) => i !== idx);
+      const newFmts = generatePageFormats(arr.length);
+      setBrief(b => ({ ...b, page_count: String(arr.length) }));
+      return arr.map((p, i) => ({ ...p, page_number: i + 1, format: newFmts[i]?.format || p.format }));
+    });
+    setText(prev => prev.length > 0 ? prev.filter((_, i) => i !== idx) : prev);
+    setPrompts(prev => prev.length > 0 ? prev.filter((_, i) => i !== idx) : prev);
+    setImages(prev => {
+      if (!prev || Object.keys(prev).length === 0) return prev;
+      const shifted = {};
+      for (const [k, v] of Object.entries(prev)) {
+        const i = Number(k);
+        if (i < idx) shifted[i] = v;
+        else if (i > idx) shifted[i - 1] = v;
+        // i === idx is dropped
+      }
+      return shifted;
+    });
+    setTextStale(true); setPromptsStale(true);
+  };
+
+  const addOutlinePage = () => {
+    let insertIdx;
+    setOutline(prev => {
+      const arr = [...prev];
+      insertIdx = arr.length - 2; // before Closing
+      arr.splice(insertIdx, 0, {
+        page_number: insertIdx + 1,
+        format: "spread",
+        title_short: "New Page",
+        setting: "",
+        description: "",
+        next_setting: "",
+        image_only: false,
+      });
+      const newFmts = generatePageFormats(arr.length);
+      setBrief(b => ({ ...b, page_count: String(arr.length) }));
+      return arr.map((p, i) => ({ ...p, page_number: i + 1, format: newFmts[i]?.format || p.format }));
+    });
+    // Insert blank entries at the same position in downstream arrays
+    setText(prev => {
+      if (prev.length === 0) return prev;
+      const arr = [...prev];
+      arr.splice(insertIdx, 0, { page_number: insertIdx + 1, text: "", scene_description: "", image_only: false });
+      return arr;
+    });
+    setPrompts(prev => {
+      if (prev.length === 0) return prev;
+      const arr = [...prev];
+      arr.splice(insertIdx, 0, { page_number: insertIdx + 1, image_prompt: "" });
+      return arr;
+    });
+    setImages(prev => {
+      if (!prev || Object.keys(prev).length === 0) return prev;
+      // Shift all images at insertIdx+ up by one
+      const shifted = {};
+      for (const [k, v] of Object.entries(prev)) {
+        const idx = Number(k);
+        shifted[idx >= insertIdx ? idx + 1 : idx] = v;
+      }
+      return shifted;
+    });
+    setTextStale(true); setPromptsStale(true);
+  };
+
   const genText = async () => {
     setErr(null); setLoading(true); cancelledRef.current = false; go("text"); mark("outline");
     setText([]);
@@ -269,7 +386,7 @@ export default function App() {
       for (let b = 0; b < outline.length; b += 3) {
         if (cancelledRef.current) break;
         const batch = outline.slice(b, b + 3);
-        const r = await api([{ role: "user", content: `BRIEF:\n${briefStr()}\nCHARACTERS:\n${chars}\nOUTLINE:\n${JSON.stringify(outline)}\n${all.length ? `TEXT SO FAR:\n${JSON.stringify(all)}\n` : ""}\nWrite text for ONLY images ${b + 1}-${Math.min(b + 3, outline.length)}:\n${JSON.stringify(batch)}\n\nMax 4 lines/page, 8-10 syl/line, ${brief.language_style || "rhyming"}, never rhyme with names.\nONLY raw JSON array of ${batch.length}: "page_number","text","image_only".` }], "text");
+        const r = await api([{ role: "user", content: `BRIEF:\n${briefStr()}\nCHARACTERS:\n${chars}\nOUTLINE:\n${JSON.stringify(outline)}\n${all.length ? `TEXT SO FAR:\n${JSON.stringify(all)}\n` : ""}\nWrite text for ONLY images ${b + 1}-${Math.min(b + 3, outline.length)}:\n${JSON.stringify(batch)}\n\nIMPORTANT: Page 1 (Cover) is title only — no story text, return as image_only: true. Story text begins on page 2.\n\nMax 4 lines/page, 8-10 syl/line, ${brief.language_style || "rhyming"}, never rhyme with names.\nONLY raw JSON array of ${batch.length}: "page_number","text","image_only".` }], "text");
         if (cancelledRef.current) break; all.push(...parseJSON(r)); setText([...all]);
       }
       if (!cancelledRef.current) { setTextOutlineHash(h); setTextStale(false); setPromptsStale(false); }
@@ -299,7 +416,7 @@ export default function App() {
 
   const genPrompts = async () => {
     setErr(null); setLoading(true); cancelledRef.current = false; go("prompts"); mark("text");
-    setPrompts([]);
+    setPrompts([]); setConsistencyResult(null);
     const all = [];
     try {
       for (let b = 0; b < outline.length; b += 3) {
@@ -337,8 +454,38 @@ export default function App() {
   };
 
   /* ═══════════════════════════════════════
+     CHARACTER CONSISTENCY PASS
+     ═══════════════════════════════════════ */
+
+  const runConsistencyPass = async () => {
+    setConsistencyLoading(true); setErr(null);
+    try {
+      const promptsText = prompts.map((p, i) => `Page ${i + 1}:\n${p.prompt}`).join("\n\n");
+      const r = await api([{ role: "user", content: `MAIN CHARACTERS:\n${chars}\n\nIMAGE PROMPTS:\n${promptsText}\n\nAnalyze these image prompts for SECONDARY characters (not the main characters described above) that appear on 2+ pages. For each recurring secondary character:\n1. Pick the RICHEST description as canonical\n2. Show every page where they appear and what changed\n3. Return corrected prompts with harmonized descriptions\n\nONLY raw JSON:\n{\n  "characters": [\n    { "name": "string", "pages": [1,3,5], "canonical": "the richest description chosen", "changes": ["Page 3: was X, now Y"] }\n  ],\n  "corrected_prompts": [ { "page_number": 1, "prompt": "..." }, ... ]\n}` }], "prompts");
+      const parsed = parseJSON(r);
+      if (parsed.characters && parsed.characters.length > 0) {
+        setConsistencyResult({ characters: parsed.characters, pendingPrompts: parsed.corrected_prompts, appliedAt: null });
+      } else {
+        setConsistencyResult({ characters: [], pendingPrompts: null, appliedAt: null });
+      }
+    } catch (e) { if (e.name !== "AbortError") setErr(e.message); }
+    setConsistencyLoading(false);
+  };
+
+  const applyConsistencyPass = () => {
+    if (!consistencyResult?.pendingPrompts) return;
+    setPrompts(consistencyResult.pendingPrompts.map(p => ({ page_number: p.page_number, prompt: p.prompt })));
+    setConsistencyResult(prev => ({ ...prev, appliedAt: Date.now(), pendingPrompts: null }));
+    setDirtyPages(Array.from({ length: pageCount }, (_, i) => i));
+  };
+
+  const discardConsistencyPass = () => { setConsistencyResult(null); };
+
+  /* ═══════════════════════════════════════
      VIEW ROUTER
      ═══════════════════════════════════════ */
+  const activeRulesEl = <ActiveRules step={step} rules={rules} hasCompanion={hasCompanion} />;
+
   const view = () => {
     switch (step) {
       case "brief":
@@ -347,26 +494,29 @@ export default function App() {
         return <ConceptCards concepts={concepts} loading={loading} onSelect={pickConcept} onRegen={genConcepts} characterSetup={brief.character_setup} />;
       case "characters":
         return <CharEditor content={chars} loading={loading} onManual={setChars} onAI={aiEditChars}
-          onGenOutline={genOutline} onViewOutline={outline.length ? () => go("outline") : null} />;
+          onGenOutline={genOutline} onViewOutline={outline.length ? () => go("outline") : null} brief={brief} activeRules={activeRulesEl} />;
       case "outline":
         return <OutlineCards outline={outline} loading={loading} lidx={lidx} onAI={aiEditOutline} onSave={manualOutline}
           onRegenOutline={genOutline} text={text} onGenText={genText} onViewText={() => go("text")}
-          qualityChecklist={getChecklistForStep("outline", rules.qualityChecklist, hasCompanion)} briefStr={briefStr()} />;
+          onDelete={deleteOutlinePage} onAddPage={addOutlinePage}
+          qualityChecklist={getChecklistForStep("outline", rules.qualityChecklist, hasCompanion)} briefStr={briefStr()} pageFormats={pageFormats} brief={brief} setBrief={setBrief} activeRules={activeRulesEl} />;
       case "text":
         return <TextCards text={text} outline={outline} loading={loading} lidx={lidx} onAI={aiEditText} onSave={manualText}
           onSaveScene={manualOutline} onRegenOutline={genOutline} textStale={textStale} prompts={prompts} onGenPrompts={genPrompts} onViewPrompts={() => go("prompts")}
           onRegenText={genText} charNames={charNames}
-          qualityChecklist={getChecklistForStep("text", rules.qualityChecklist, hasCompanion)} briefStr={briefStr()} />;
+          qualityChecklist={getChecklistForStep("text", rules.qualityChecklist, hasCompanion)} briefStr={briefStr()} pageFormats={pageFormats} brief={brief} setBrief={setBrief} activeRules={activeRulesEl} />;
       case "prompts":
         return <PromptCards prompts={prompts} loading={loading} lidx={lidx} onAI={editPrompt} onRegenOne={regenOnePrompt}
           onSave={manualPrompt} promptsStale={promptsStale} onGenPrompts={genPrompts}
           onGoImages={() => { mark("prompts"); go("images"); }}
           bannedWords={rules.bannedWords} chars={chars}
-          qualityChecklist={getChecklistForStep("prompts", rules.qualityChecklist, hasCompanion)} briefStr={briefStr()} />;
+          qualityChecklist={getChecklistForStep("prompts", rules.qualityChecklist, hasCompanion)} briefStr={briefStr()} pageFormats={pageFormats} brief={brief} setBrief={setBrief} activeRules={activeRulesEl}
+          consistencyResult={consistencyResult} consistencyLoading={consistencyLoading}
+          onRunConsistency={runConsistencyPass} onApplyConsistency={applyConsistencyPass} onDiscardConsistency={discardConsistencyPass} />;
       case "images":
         return <div>
           <ImagesStep prompts={prompts} images={images} setImages={setImages} outline={outline}
-            dirtyPages={dirtyPages} settings={settings} />
+            dirtyPages={dirtyPages} settings={settings} pageFormats={pageFormats} />
           <div style={{ marginTop: 16, display: "flex", gap: 8 }}>
             <Btn onClick={() => { mark("images"); go("preview"); }}>Preview Book →</Btn>
             <Btn ghost onClick={() => go("prompts")}>← Back to Prompts</Btn>
@@ -374,14 +524,14 @@ export default function App() {
         </div>;
       case "preview":
         return <div>
-          <BookPreview outline={outline} text={text} images={images} />
+          <BookPreview outline={outline} text={text} images={images} pageFormats={pageFormats} />
           <div style={{ marginTop: 16, display: "flex", gap: 8 }}>
             <Btn onClick={() => { mark("preview"); go("export"); }}>Go to Export →</Btn>
             <Btn ghost onClick={() => go("images")}>← Back to Images</Btn>
           </div>
         </div>;
       case "export":
-        return <ExportView
+        return <ExportView pageFormats={pageFormats}
           data={{ brief, characters: chars, selectedConcept: selConcept, outline, storyText: text, imagePrompts: prompts, images }} />;
     }
   };
@@ -400,6 +550,8 @@ export default function App() {
           <div style={{ display: "flex", gap: 6 }}>
             <button onClick={newBook} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 8, padding: "8px 14px", fontSize: 13, cursor: "pointer", color: T.textDim, fontFamily: "inherit" }}
               onMouseEnter={e => e.target.style.color = T.accent} onMouseLeave={e => e.target.style.color = T.textDim}>+ New Book</button>
+            {(selConcept || outline.length > 0) && <button onClick={duplicateBook} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 8, padding: "8px 14px", fontSize: 13, cursor: "pointer", color: T.textDim, fontFamily: "inherit" }}
+              onMouseEnter={e => e.target.style.color = T.accent} onMouseLeave={e => e.target.style.color = T.textDim}>⎘ Duplicate</button>}
             <button onClick={() => setSessionsOpen(true)} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 8, padding: "8px 14px", fontSize: 13, cursor: "pointer", color: T.textDim, fontFamily: "inherit" }}
               onMouseEnter={e => e.target.style.color = T.accent} onMouseLeave={e => e.target.style.color = T.textDim}>📚 Templates</button>
             <button onClick={() => setSettingsOpen(true)} style={{ background: T.card, border: `1px solid ${T.border}`, borderRadius: 8, padding: "8px 14px", fontSize: 13, cursor: "pointer", color: T.textDim, fontFamily: "inherit" }}
@@ -408,7 +560,24 @@ export default function App() {
         </div>
 
         <NavSteps steps={STEPS} current={step} done={done} onNav={go} />
-        {loading && <div style={{ marginBottom: 16 }}><Btn danger ghost small onClick={stopGen}>■ Stop Generation</Btn></div>}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: loading || err ? 0 : 16, marginTop: 4 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontSize: 11, color: T.textDim, textTransform: "uppercase", letterSpacing: 0.5 }}>AI Model:</span>
+            {CLAUDE_MODELS.map(m => (
+              <button key={m.id} onClick={() => setSettings(s => ({ ...s, claudeModel: m.id }))}
+                style={{
+                  background: (claudeModel || CLAUDE_MODELS[0].id) === m.id ? T.accent + "22" : "transparent",
+                  border: `1px solid ${(claudeModel || CLAUDE_MODELS[0].id) === m.id ? T.accent : T.border}`,
+                  borderRadius: 6, padding: "3px 10px", fontSize: 12, cursor: "pointer",
+                  color: (claudeModel || CLAUDE_MODELS[0].id) === m.id ? T.accent : T.textDim,
+                  fontFamily: "inherit", fontWeight: (claudeModel || CLAUDE_MODELS[0].id) === m.id ? 600 : 400,
+                }}
+                title={m.description}
+              >{m.label}</button>
+            ))}
+          </div>
+          {loading && <Btn danger ghost small onClick={stopGen}>■ Stop</Btn>}
+        </div>
         {err && <ErrBox msg={err} onDismiss={() => setErr(null)} />}
         {view()}
       </div>

@@ -1,7 +1,7 @@
 "use client";
 import { T, imgName, imgFmt, pageNum } from "@/lib/constants";
 
-export default function BookPreview({ outline, text, images }) {
+export default function BookPreview({ outline, text, images, pageFormats }) {
   const totalPages = outline?.length || text?.length || 0;
 
   // For each page, pick the starred image or the first available
@@ -19,10 +19,10 @@ export default function BookPreview({ outline, text, images }) {
     <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
       {Array.from({ length: totalPages }, (_, i) => {
         const img = getImage(i);
-        const isSpread = imgFmt(i) === "spread";
+        const isSpread = imgFmt(i, pageFormats) === "spread";
         const storyContent = text?.[i]?.text || "";
-        const pageName = imgName(i);
-        const pNum = pageNum(i);
+        const pageName = imgName(i, pageFormats);
+        const pNum = pageNum(i, pageFormats);
 
         return <div key={i} style={{
           background: T.card,

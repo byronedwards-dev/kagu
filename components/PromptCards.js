@@ -1,7 +1,8 @@
 "use client";
 import { useState, useEffect } from "react";
-import { T, imgFmt } from "@/lib/constants";
+import { T, imgFmt, ILLUSTRATION_STYLES } from "@/lib/constants";
 import { findBannedWords } from "@/lib/rules";
+import InlinePillEditor from "./ui/InlinePillEditor";
 import Btn from "./ui/Btn";
 import Txt from "./ui/Txt";
 import AIBar from "./ui/AIBar";
@@ -9,10 +10,11 @@ import Loader from "./ui/Loader";
 import PageHdr from "./ui/PageHdr";
 import StaleWarning from "./ui/StaleWarning";
 import QualityCheck from "./ui/QualityCheck";
+import ConsistencyPass from "./ui/ConsistencyPass";
 
 // Check if prompt contains any indication of the expected aspect ratio
-function hasAspectHint(prompt, idx) {
-  const fmt = imgFmt(idx);
+function hasAspectHint(prompt, idx, pageFormats) {
+  const fmt = imgFmt(idx, pageFormats);
   const p = (prompt || "").toLowerCase();
   if (fmt === "spread") {
     return p.includes("1:2") || p.includes("2:1") || p.includes("panoramic") || p.includes("2048x1024") || p.includes("1024x2048") || p.includes("wide") || p.includes("spread");
@@ -38,21 +40,21 @@ function formatPrompt(raw) {
   return f.trim();
 }
 
-function PCard({ prompt, idx, lidx, onAI, onRegenOne, onSave, bannedWords, chars }) {
+function PCard({ prompt, idx, lidx, onAI, onRegenOne, onSave, bannedWords, chars, pageFormats }) {
   const [ed, setEd] = useState(false);
   const [lc, setLc] = useState(prompt.prompt || "");
   useEffect(() => { setLc(prompt.prompt || ""); }, [prompt.prompt]);
 
   const found = findBannedWords(prompt.prompt || "", bannedWords);
   const hasChars = chars && (prompt.prompt || "").length > 200;
-  const aspectOk = hasAspectHint(prompt.prompt, idx);
-  const expectedFmt = imgFmt(idx) === "spread" ? "panoramic/1:2" : "square/1:1";
+  const aspectOk = hasAspectHint(prompt.prompt, idx, pageFormats);
+  const expectedFmt = imgFmt(idx, pageFormats) === "spread" ? "panoramic/1:2" : "square/1:1";
   const charCount = (prompt.prompt || "").length;
 
   return <div style={{ background: T.card, border: `1px solid ${lidx === idx ? T.accent : T.border}`, borderRadius: 10, padding: 14 }}>
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-        <PageHdr idx={idx} />
+        <PageHdr idx={idx} pageFormats={pageFormats} />
         <span style={{ fontSize: 11, color: T.textDim }}>{charCount} chars</span>
       </div>
       {lidx !== idx && <div style={{ display: "flex", gap: 4 }}>
@@ -78,23 +80,25 @@ function PCard({ prompt, idx, lidx, onAI, onRegenOne, onSave, bannedWords, chars
   </div>;
 }
 
-export default function PromptCards({ prompts, loading, lidx, onAI, onRegenOne, onSave, promptsStale, onGenPrompts, onGoImages, bannedWords, chars, qualityChecklist, briefStr }) {
+export default function PromptCards({ prompts, loading, lidx, onAI, onRegenOne, onSave, promptsStale, onGenPrompts, onGoImages, bannedWords, chars, qualityChecklist, briefStr, pageFormats, brief, setBrief, activeRules, consistencyResult, consistencyLoading, onRunConsistency, onApplyConsistency, onDiscardConsistency }) {
   if (loading && !prompts.length) return <><h2 style={{ fontSize: 22, fontWeight: 700, color: T.text }}>Image Prompts</h2><Loader text="Generating prompts" /></>;
   return <div>
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
       <div>
         <h2 style={{ fontSize: 22, fontWeight: 700, color: T.text, margin: "0 0 6px" }}>Image Prompts</h2>
-        <p style={{ fontSize: 14, color: T.textSoft, margin: 0 }}>Click prompt to edit · AI bar for instructions · ↻ regenerates from text</p>
+        <p style={{ fontSize: 14, color: T.textSoft, margin: "0 0 6px" }}>Click prompt to edit · AI bar for instructions · ↻ regenerates from text</p>
+        {brief && setBrief && <InlinePillEditor label="Style" value={brief.illustration_style} onChange={v => setBrief(p => ({ ...p, illustration_style: v }))} options={ILLUSTRATION_STYLES} />}
       </div>
       {!loading && prompts.length > 0 && <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
         <Btn small onClick={onGoImages}>Generate Images →</Btn>
         <Btn small ghost onClick={onGenPrompts}>↻ Regen All</Btn>
       </div>}
     </div>
+    {activeRules}
     {promptsStale && <StaleWarning msg="Text has changed since these prompts were generated. Consider regenerating." />}
     <div style={{ display: "grid", gap: 6 }}>
       {prompts.map((p, i) => <PCard key={i} prompt={p} idx={i} lidx={lidx} onAI={onAI} onRegenOne={onRegenOne}
-        onSave={onSave} bannedWords={bannedWords} chars={chars} />)}
+        onSave={onSave} bannedWords={bannedWords} chars={chars} pageFormats={pageFormats} />)}
     </div>
     {loading && <Loader text="Generating next batch" />}
     {!loading && prompts.length > 0 && qualityChecklist?.length > 0 && <QualityCheck
@@ -103,6 +107,10 @@ export default function PromptCards({ prompts, loading, lidx, onAI, onRegenOne, 
         const promptsText = prompts.map((p, i) => `Page ${i + 1}:\n${p.prompt}`).join("\n\n");
         return `BRIEF:\n${briefStr}\n\nCHARACTER DESCRIPTIONS:\n${chars}\n\nIMAGE PROMPTS:\n${promptsText}`;
       }}
+    />}
+    {!loading && prompts.length > 0 && <ConsistencyPass
+      result={consistencyResult} loading={consistencyLoading}
+      onRun={onRunConsistency} onApply={onApplyConsistency} onDiscard={onDiscardConsistency}
     />}
   </div>;
 }

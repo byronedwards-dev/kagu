@@ -56,15 +56,15 @@ function joinCharBlocks(blocks) {
   return blocks.map(b => b.text).join("\n\n");
 }
 
-export default function CharEditor({ content, loading, onManual, onAI, onGenOutline, onViewOutline }) {
+export default function CharEditor({ content, loading, onManual, onAI, onGenOutline, onViewOutline, brief, activeRules }) {
   const blocks = splitCharBlocks(content);
   const multiBlock = blocks.length > 1;
 
   // Validation warnings
   const warnings = [];
   if (content) {
-    if (!/\b(eye|eyes|face|cheek|nose|lip|freckle|dimple)\b/i.test(content)) {
-      warnings.push("Missing facial detail — add eye color, nose shape, cheeks, etc. for face recognition");
+    if (!/\b(eye|eyes|skin)\b/i.test(content)) {
+      warnings.push("Missing basic identifiers — add eye color and skin tone for face recognition");
     }
     const accessoryMatches = content.match(/\b(bandana|bow|scarf|hat|cap|backpack|collar|ribbon|necklace|bracelet|headband)\b/gi);
     if (accessoryMatches && accessoryMatches.length > 4) {
@@ -79,9 +79,13 @@ export default function CharEditor({ content, loading, onManual, onAI, onGenOutl
     onManual(joinCharBlocks(updated));
   };
 
+  const showAgeWarning = brief?.age_range?.includes("2–3") || brief?.character_age?.match(/\b3\b/);
+
   return <div>
     <h2 style={{ fontSize: 22, fontWeight: 700, color: T.text, margin: "0 0 16px" }}>Character Descriptions</h2>
+    {showAgeWarning && <div style={{ background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.25)", borderRadius: 10, padding: "10px 14px", margin: "0 0 10px", fontSize: 13, color: T.amber }}>Characters will be drawn 1-2 years younger than the selected age to compensate for AI making children look older.</div>}
     {warnings.map((w, i) => <div key={i} style={{ background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.25)", borderRadius: 10, padding: "10px 14px", margin: "0 0 10px", fontSize: 13, color: T.amber }}>⚠ {w}</div>)}
+    {activeRules}
 
     {multiBlock ? (
       <div style={{ display: "grid", gap: 12 }}>

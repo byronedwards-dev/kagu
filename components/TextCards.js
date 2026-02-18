@@ -1,7 +1,8 @@
 "use client";
 import { useState, useEffect } from "react";
-import { T } from "@/lib/constants";
+import { T, LANGUAGE_STYLES } from "@/lib/constants";
 import { countSyllables, findNameRhymes } from "@/lib/rules";
+import InlinePillEditor from "./ui/InlinePillEditor";
 import Btn from "./ui/Btn";
 import Txt from "./ui/Txt";
 import Pill from "./ui/Pill";
@@ -11,7 +12,7 @@ import PageHdr from "./ui/PageHdr";
 import StaleWarning from "./ui/StaleWarning";
 import QualityCheck from "./ui/QualityCheck";
 
-function TCard({ page, op, idx, lidx, onAI, onSave, onSaveScene, charNames }) {
+function TCard({ page, op, idx, lidx, onAI, onSave, onSaveScene, charNames, pageFormats }) {
   const [ed, setEd] = useState(false);
   const [lc, setLc] = useState(page.text || "");
   const [edScene, setEdScene] = useState(false);
@@ -28,7 +29,7 @@ function TCard({ page, op, idx, lidx, onAI, onSave, onSaveScene, charNames }) {
   const syllableCounts = lines.map(l => countSyllables(l));
 
   return <div style={{ background: T.card, border: `1px solid ${lidx === idx ? T.accent : T.border}`, borderRadius: 10, padding: 14 }}>
-    <PageHdr idx={idx} titleShort={op?.title_short} />
+    <PageHdr idx={idx} titleShort={op?.title_short} pageFormats={pageFormats} />
     {page.image_only && <div style={{ marginBottom: 6 }}><Pill color={T.amber}>Image Only</Pill></div>}
     {lidx === idx ? <Loader text="Updating" /> : <div style={{ display: "grid", gridTemplateColumns: desc ? "1fr 1fr" : "1fr", gap: 14 }}>
       <div>
@@ -59,7 +60,7 @@ function TCard({ page, op, idx, lidx, onAI, onSave, onSaveScene, charNames }) {
   </div>;
 }
 
-export default function TextCards({ text, outline, loading, lidx, onAI, onSave, onSaveScene, onRegenOutline, textStale, prompts, onGenPrompts, onViewPrompts, onRegenText, charNames, qualityChecklist, briefStr }) {
+export default function TextCards({ text, outline, loading, lidx, onAI, onSave, onSaveScene, onRegenOutline, textStale, prompts, onGenPrompts, onViewPrompts, onRegenText, charNames, qualityChecklist, briefStr, pageFormats, brief, setBrief, activeRules }) {
   // Total word count
   const totalWords = text.reduce((sum, p) => sum + (p.text || "").split(/\s+/).filter(Boolean).length, 0);
 
@@ -68,7 +69,8 @@ export default function TextCards({ text, outline, loading, lidx, onAI, onSave, 
     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16 }}>
       <div>
         <h2 style={{ fontSize: 22, fontWeight: 700, color: T.text, margin: "0 0 6px" }}>Story Text</h2>
-        <p style={{ fontSize: 14, color: T.textSoft, margin: 0 }}>{totalWords} words total · Click to edit text or scene</p>
+        <p style={{ fontSize: 14, color: T.textSoft, margin: "0 0 6px" }}>{totalWords} words total · Click to edit text or scene</p>
+        {brief && setBrief && <InlinePillEditor label="Language" value={brief.language_style} onChange={v => setBrief(p => ({ ...p, language_style: v }))} options={LANGUAGE_STYLES} />}
       </div>
       {!loading && text.length > 0 && <div style={{ display: "flex", gap: 8, flexWrap: "wrap", flexShrink: 0 }}>
         {prompts.length > 0
@@ -79,9 +81,10 @@ export default function TextCards({ text, outline, loading, lidx, onAI, onSave, 
         <Btn small ghost onClick={onRegenOutline}>↻ Regen Scene</Btn>
       </div>}
     </div>
+    {activeRules}
     {textStale && <StaleWarning msg="Outline has changed since this text was generated. Consider regenerating." />}
     <div style={{ display: "grid", gap: 6 }}>
-      {text.map((p, i) => <TCard key={i} page={p} op={outline?.[i]} idx={i} lidx={lidx} onAI={onAI} onSave={onSave} onSaveScene={onSaveScene} charNames={charNames} />)}
+      {text.map((p, i) => <TCard key={i} page={p} op={outline?.[i]} idx={i} lidx={lidx} onAI={onAI} onSave={onSave} onSaveScene={onSaveScene} charNames={charNames} pageFormats={pageFormats} />)}
     </div>
     {loading && <Loader text="Generating next batch" />}
     {!loading && text.length > 0 && qualityChecklist?.length > 0 && <QualityCheck

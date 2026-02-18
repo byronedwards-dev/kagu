@@ -8,7 +8,7 @@ import Loader from "./ui/Loader";
 import PageHdr from "./ui/PageHdr";
 import ErrBox from "./ui/ErrBox";
 
-export default function ImagesStep({ prompts, images, setImages, outline, dirtyPages, settings }) {
+export default function ImagesStep({ prompts, images, setImages, outline, dirtyPages, settings, pageFormats }) {
   const [selectedModels, setSelectedModels] = useState(new Set([settings?.defaultModel || "flux-2-pro"]));
   const [genErr, setGenErr] = useState(null);
   const [copied, setCopied] = useState(null);
@@ -64,8 +64,8 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
     const base = pageIndices.map(idx => ({
       page_index: idx,
       page_name: outline?.[idx]?.title_short || `Page ${idx + 1}`,
-      format: imgFmt(idx),
-      aspect_ratio: imgFmt(idx) === "spread" ? "1:2" : "1:1",
+      format: imgFmt(idx, pageFormats),
+      aspect_ratio: imgFmt(idx, pageFormats) === "spread" ? "1:2" : "1:1",
       image_prompt: prompts[idx]?.prompt || "",
     })).filter(p => p.image_prompt);
 
@@ -350,7 +350,7 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
         }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-              <PageHdr idx={i} titleShort={outline?.[i]?.title_short} />
+              <PageHdr idx={i} titleShort={outline?.[i]?.title_short} pageFormats={pageFormats} />
               {isDirty && <Pill color={T.amber}>Dirty</Pill>}
               {isPagePending && isPageDone && <Pill color={T.accent}>✓</Pill>}
             </div>
@@ -389,7 +389,7 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
                     alt={`Page ${i + 1} variant ${j + 1}`}
                     onClick={() => setLightbox({ url: img.url, pageIdx: i, imgIdx: j })}
                     style={{
-                      width: imgFmt(i) === "spread" ? 480 : 280,
+                      width: imgFmt(i, pageFormats) === "spread" ? 480 : 280,
                       height: 280,
                       objectFit: "cover",
                       borderRadius: 10,

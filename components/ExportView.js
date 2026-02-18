@@ -3,13 +3,13 @@ import { useState } from "react";
 import { T, imgName, imgFmt } from "@/lib/constants";
 import Btn from "./ui/Btn";
 
-export default function ExportView({ data }) {
+export default function ExportView({ data, pageFormats }) {
   const [copied, setCopied] = useState(null);
   const copy = (k, t) => { navigator.clipboard.writeText(t); setCopied(k); setTimeout(() => setCopied(null), 2000); };
 
-  const storyText = data.storyText?.map((p, i) => `--- ${i + 1}. ${imgName(i)} ---\n${p.text || "(image only)"}`).join("\n\n") || "";
-  const promptsText = data.imagePrompts?.map((p, i) => `--- ${i + 1}. ${imgName(i)} ---\n${p.prompt}`).join("\n\n") || "";
-  const outlineText = data.outline?.map((p, i) => `${i + 1}. ${imgName(i)} [${imgFmt(i)}] — ${p.description}`).join("\n") || "";
+  const storyText = data.storyText?.map((p, i) => `--- ${i + 1}. ${imgName(i, pageFormats)} ---\n${p.text || "(image only)"}`).join("\n\n") || "";
+  const promptsText = data.imagePrompts?.map((p, i) => `--- ${i + 1}. ${imgName(i, pageFormats)} ---\n${p.prompt}`).join("\n\n") || "";
+  const outlineText = data.outline?.map((p, i) => `${i + 1}. ${imgName(i, pageFormats)} [${imgFmt(i, pageFormats)}] — ${p.description}`).join("\n") || "";
 
   // Build list of starred (selected) images — one per page
   const images = data.images || {};
@@ -128,9 +128,9 @@ export default function ExportView({ data }) {
               {image ? (
                 <img
                   src={image.url}
-                  alt={imgName(pageIdx)}
+                  alt={imgName(pageIdx, pageFormats)}
                   onClick={() => downloadImage(image.url, pageIdx, image.model)}
-                  style={{ width: "100%", aspectRatio: imgFmt(pageIdx) === "spread" ? "2/1" : "1/1", objectFit: "cover", cursor: "pointer", display: "block" }}
+                  style={{ width: "100%", aspectRatio: imgFmt(pageIdx, pageFormats) === "spread" ? "2/1" : "1/1", objectFit: "cover", cursor: "pointer", display: "block" }}
                 />
               ) : (
                 <div style={{ width: "100%", aspectRatio: "1/1", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, color: T.textDim }}>
@@ -138,7 +138,7 @@ export default function ExportView({ data }) {
                 </div>
               )}
               <div style={{ padding: "4px 6px", fontSize: 11, color: T.textDim, textAlign: "center" }}>
-                {imgName(pageIdx)}
+                {imgName(pageIdx, pageFormats)}
               </div>
             </div>
           ))}
