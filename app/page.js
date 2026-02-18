@@ -16,6 +16,7 @@ import OutlineCards from "@/components/OutlineCards";
 import TextCards from "@/components/TextCards";
 import PromptCards from "@/components/PromptCards";
 import ImagesStep from "@/components/ImagesStep";
+import BookPreview from "@/components/BookPreview";
 import ExportView from "@/components/ExportView";
 import SettingsModal from "@/components/SettingsModal";
 import SessionsModal from "@/components/SessionsModal";
@@ -367,8 +368,16 @@ export default function App() {
           <ImagesStep prompts={prompts} images={images} setImages={setImages} outline={outline}
             dirtyPages={dirtyPages} settings={settings} />
           <div style={{ marginTop: 16, display: "flex", gap: 8 }}>
-            <Btn onClick={() => { mark("images"); go("export"); }}>Go to Export →</Btn>
+            <Btn onClick={() => { mark("images"); go("preview"); }}>Preview Book →</Btn>
             <Btn ghost onClick={() => go("prompts")}>← Back to Prompts</Btn>
+          </div>
+        </div>;
+      case "preview":
+        return <div>
+          <BookPreview outline={outline} text={text} images={images} />
+          <div style={{ marginTop: 16, display: "flex", gap: 8 }}>
+            <Btn onClick={() => { mark("preview"); go("export"); }}>Go to Export →</Btn>
+            <Btn ghost onClick={() => go("images")}>← Back to Images</Btn>
           </div>
         </div>;
       case "export":
