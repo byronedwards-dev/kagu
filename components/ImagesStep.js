@@ -324,7 +324,7 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
 
         return <div key={i} style={{
           background: T.card, border: `1px solid ${isPagePending && !isPageDone ? T.accent : isDirty ? T.amber : T.border}`,
-          borderRadius: 10, padding: 14,
+          borderRadius: 10, padding: 14, overflow: "hidden",
         }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
@@ -359,7 +359,7 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
 
           {/* Image gallery */}
           {pageImages.length > 0 && (
-            <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingTop: 4 }}>
+            <div style={{ display: "flex", gap: 10, overflowX: "auto", paddingTop: 4, paddingBottom: 4, marginLeft: -14, marginRight: -14, paddingLeft: 14, paddingRight: 14 }}>
               {pageImages.map((img, j) => (
                 <div key={j} style={{ position: "relative", flexShrink: 0 }}>
                   <img
