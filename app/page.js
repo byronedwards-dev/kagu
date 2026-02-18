@@ -52,9 +52,10 @@ export default function App() {
   useEffect(() => { saveRules(rules); }, [rules]);
 
   // ─── Settings (connections) ───
+  const DEFAULT_SETTINGS = { n8nWebhookUrl: "https://bed.app.n8n.cloud/webhook/cc1b5eb6-5001-4ea8-bcff-e290885c9cd1" };
   const [settings, setSettings] = useState(() => {
-    if (typeof window === "undefined") return {};
-    try { return JSON.parse(localStorage.getItem("kagu-settings") || "{}"); } catch { return {}; }
+    if (typeof window === "undefined") return { ...DEFAULT_SETTINGS };
+    try { return { ...DEFAULT_SETTINGS, ...JSON.parse(localStorage.getItem("kagu-settings") || "{}") }; } catch { return { ...DEFAULT_SETTINGS }; }
   });
   useEffect(() => {
     if (typeof window === "undefined") return;
