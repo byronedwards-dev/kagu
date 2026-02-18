@@ -110,7 +110,7 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
               for (const v of (result.variants || [])) {
                 if (!existingUrls.includes(v.url)) {
                   if (!next[idx]) next[idx] = [];
-                  next[idx] = [...next[idx], { url: v.url, model: v.model || "unknown", ts: Date.now(), selected: false }];
+                  next[idx] = [{ url: v.url, model: v.model || "unknown", ts: Date.now(), selected: false }, ...next[idx]];
                 }
               }
             }
