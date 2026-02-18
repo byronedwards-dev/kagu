@@ -19,6 +19,28 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
   const [lightbox, setLightbox] = useState(null); // { url, pageIdx, imgIdx }
   const pollRef = useRef(null);
 
+  // Lightbox keyboard navigation: arrow keys + Escape
+  useEffect(() => {
+    if (!lightbox) return;
+    const handler = (e) => {
+      if (e.key === "Escape") { setLightbox(null); return; }
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      // Build flat list of [pageIdx, imgIdx] for all images
+      const flat = [];
+      for (let p = 0; p < prompts.length; p++) {
+        const pageImgs = images[p] || [];
+        for (let j = 0; j < pageImgs.length; j++) flat.push([p, j]);
+      }
+      const cur = flat.findIndex(([p, j]) => p === lightbox.pageIdx && j === lightbox.imgIdx);
+      if (cur === -1) return;
+      const next = e.key === "ArrowRight" ? (cur + 1) % flat.length : (cur - 1 + flat.length) % flat.length;
+      const [np, nj] = flat[next];
+      setLightbox({ url: images[np][nj].url, pageIdx: np, imgIdx: nj });
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [lightbox, images, prompts]);
+
   const toggleModel = (id) => {
     setSelectedModels(prev => {
       const next = new Set(prev);
@@ -414,6 +436,28 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
         }}
       >
         <div onClick={e => e.stopPropagation()} style={{ position: "relative", maxWidth: "90vw", maxHeight: "90vh" }}>
+          {/* Left arrow */}
+          <button
+            onClick={() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowLeft" }))}
+            style={{
+              position: "absolute", left: -48, top: "50%", transform: "translateY(-50%)",
+              background: "rgba(0,0,0,.6)", border: "1px solid rgba(255,255,255,.15)", borderRadius: "50%",
+              width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 18, color: "#fff", cursor: "pointer", zIndex: 1,
+            }}
+            title="Previous (←)"
+          >‹</button>
+          {/* Right arrow */}
+          <button
+            onClick={() => window.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight" }))}
+            style={{
+              position: "absolute", right: -48, top: "50%", transform: "translateY(-50%)",
+              background: "rgba(0,0,0,.6)", border: "1px solid rgba(255,255,255,.15)", borderRadius: "50%",
+              width: 36, height: 36, display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 18, color: "#fff", cursor: "pointer", zIndex: 1,
+            }}
+            title="Next (→)"
+          >›</button>
           <img
             src={lightbox.url}
             alt="Full size preview"
@@ -423,6 +467,13 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
               boxShadow: "0 8px 40px rgba(0,0,0,.5)",
             }}
           />
+          {/* Page/model label */}
+          <div style={{
+            position: "absolute", bottom: -28, left: "50%", transform: "translateX(-50%)",
+            fontSize: 12, color: "rgba(255,255,255,.6)", whiteSpace: "nowrap",
+          }}>
+            {images[lightbox.pageIdx]?.[lightbox.imgIdx]?.model || ""}
+          </div>
           <div style={{ position: "absolute", top: -12, right: -12, display: "flex", gap: 6 }}>
             <button
               onClick={() => {
@@ -443,6 +494,7 @@ export default function ImagesStep({ prompts, images, setImages, outline, dirtyP
                 width: 32, height: 32, display: "flex", alignItems: "center", justifyContent: "center",
                 fontSize: 16, color: T.text, cursor: "pointer", fontFamily: "inherit",
               }}
+              title="Close (Esc)"
             >✕</button>
           </div>
         </div>
